@@ -30,12 +30,17 @@ export async function login(
   }
 
   await createSession(user.id);
-  redirect(user.role === "ADMIN" ? "/admin" : "/escala");
+  redirect(user.role === "ADMIN" ? "/admin" : "/inicio");
 }
 
 export async function logout() {
   await deleteSession();
   redirect("/login");
+}
+
+/** Só apaga o cookie — usado pela página de sessão encerrada, que não pode mexer em cookie durante a renderização. */
+export async function encerrarSessaoExpirada() {
+  await deleteSession();
 }
 
 export type ChangePasswordState = { error?: string; success?: boolean } | undefined;

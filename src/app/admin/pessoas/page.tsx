@@ -19,6 +19,7 @@ export default async function AdminPessoasPage() {
     nome: p.nome,
     username: p.username,
     ativo: p.ativo,
+    verTudo: p.verTudo,
     funcaoIds: p.funcoes.map((f) => f.funcaoId),
   }));
 

@@ -5,13 +5,13 @@ import { salvarPessoa, excluirPessoa } from "@/lib/actions/pessoas";
 import { FormError } from "@/components/ui/FormMessage";
 import PasswordField from "@/components/ui/PasswordField";
 import type { CategoriaDTO } from "@/components/EscalaBoard";
-import { IconKey } from "@/components/icons";
 
 type Pessoa = {
   id: string;
   nome: string;
   username: string | null;
   ativo: boolean;
+  verTudo: boolean;
   funcaoIds: string[];
 };
 
@@ -89,6 +89,34 @@ function PessoaForm({
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div>
+        <span className="mb-2 block text-[10.5px] font-bold uppercase tracking-wide text-ink-400">
+          Tipo de visualização
+        </span>
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-900">
+            <input
+              type="radio"
+              name="verTudo"
+              value="off"
+              defaultChecked={!(editando?.verTudo ?? false)}
+              className="h-4 w-4 accent-orange-600"
+            />
+            Ver apenas minha responsabilidade
+          </label>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-900">
+            <input
+              type="radio"
+              name="verTudo"
+              value="on"
+              defaultChecked={editando?.verTudo ?? false}
+              className="h-4 w-4 accent-orange-600"
+            />
+            Ver a escala inteira (mas só edita o que é dela)
+          </label>
         </div>
       </div>
 
@@ -171,7 +199,7 @@ export default function PessoasManager({ categorias, pessoas }: { categorias: Ca
             <span className="min-w-[110px] text-[13.5px] font-bold text-ink-900">{p.nome}</span>
             {p.username && (
               <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-400">
-                <IconKey /> {p.username}
+                🔑 {p.username}
               </span>
             )}
             <div className="flex flex-1 flex-wrap gap-1.5">

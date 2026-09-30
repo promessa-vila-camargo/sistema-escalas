@@ -16,6 +16,12 @@ export function isoDate(y: number, m: number, d: number) {
   return `${y}-${pad2(m + 1)}-${pad2(d)}`;
 }
 
+/** Desfaz isoDate() sem passar por `new Date(iso)`, que interpretaria como UTC. */
+export function parseIsoDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return { y, m: m - 1, d };
+}
+
 export function fmtDDMM(y: number, m: number, d: number) {
   return `${pad2(d)}/${pad2(m + 1)}`;
 }

@@ -4,8 +4,34 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { definirAtribuicao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
-import MinisterioIcon from "./MinisterioIcon";
-import { IconAlert, IconCheck, IconPdf, IconPrinter } from "./icons";
+
+const EMOJI_MINISTERIO: Record<string, string> = {
+  "Direção": "⛪",
+  "Palavra e Pregação": "🎤",
+  "Mídia": "📱",
+  "Datashow": "💻",
+  "Transmissão": "🖥️",
+  "Som": "🎚️",
+};
+const EMOJI_FUNCAO: Record<string, string> = {
+  "Diretor(a)": "⛪",
+  "Palavra Pastoral": "🎤",
+  "Pregador": "🎤",
+  "Mídia": "📱",
+  "Datashow": "💻",
+  "Operador de Transmissão": "🖥️",
+  "Câmera Fixa": "📹",
+  "Câmera Móvel 1": "📹",
+  "Câmera Móvel 2": "📹",
+  "Mesa de Som": "🎚️",
+  "Som da Transmissão": "🎚️",
+};
+function emojiMinisterio(nome: string) {
+  return EMOJI_MINISTERIO[nome] ?? "🏛️";
+}
+function emojiFuncao(nome: string) {
+  return EMOJI_FUNCAO[nome] ?? "•";
+}
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
@@ -39,7 +65,10 @@ export default function EscalaBoard({
     pendentes: { data: string; dia: number; diaSemana: number; faltando: string[] }[];
   } | null>(null);
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [salvandoTudo, setSalvandoTudo] = useState(false);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
 
@@ -67,16 +96,18 @@ export default function EscalaBoard({
   const temAlgumaFuncao = categorias.some((c) => c.funcoes.length > 0);
 
   /**
-   * Voluntário só vê os ministérios/funções que o admin atribuiu ao login
-   * dele — o resto do quadro nem aparece (não é só "travado", some mesmo).
-   * Admin continua vendo tudo, para escalar qualquer função.
+   * "Ver apenas minha responsabilidade" (padrão): só aparece o que foi
+   * atribuído ao login. "Ver tudo": enxerga a escala inteira como o admin,
+   * mas só EDITA as próprias funções (as outras aparecem travadas, só
+   * leitura) — ver renderCard mais abaixo.
    */
+  const podeVerTudo = isAdmin || currentUser.verTudo;
   const categoriasVisiveis = useMemo(() => {
-    if (isAdmin) return categorias;
+    if (podeVerTudo) return categorias;
     return categorias
       .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => currentUser.funcaoIds.includes(f.id)) }))
       .filter((c) => c.funcoes.length > 0);
-  }, [categorias, isAdmin, currentUser.funcaoIds]);
+  }, [categorias, podeVerTudo, currentUser.funcaoIds]);
 
   /** Dentro do que a pessoa pode ver, ainda filtra pelas funções que valem naquele dia da semana (ex.: Datashow não entra na quarta). */
   function categoriasDoDia(diaSemana: number) {
@@ -147,7 +178,11 @@ export default function EscalaBoard({
       clearTimeout(saveTimers.current[key]);
       delete saveTimers.current[key];
     }
-    commitSave(data, funcaoId, value);
+    // Nomes são sempre salvos em caixa alta — já reflete isso na tela ao
+    // sair do campo, sem esperar o servidor/reload pra mostrar certo.
+    const maiuscula = value.trim().toUpperCase();
+    if (maiuscula !== value) applyLocalChange(data, funcaoId, maiuscula);
+    commitSave(data, funcaoId, maiuscula);
   }
 
   function renderCard(data: string, dia: number, diaSemana: number) {
@@ -184,9 +219,9 @@ export default function EscalaBoard({
               type="button"
               title="Gerar PDF desta escala"
               onClick={() => handleExportClick({ data, dia, diaSemana })}
-              className="flex-none rounded-md p-1 text-ink-400 hover:bg-brand-50 hover:text-orange-600"
+              className="flex-none rounded-md p-1 text-[15px] text-ink-400 hover:bg-brand-50 hover:text-orange-600"
             >
-              <IconPrinter />
+              🖨️
             </button>
           )}
         </div>
@@ -206,31 +241,39 @@ export default function EscalaBoard({
           return (
             <div key={cat.id} className="mb-0.5">
               <div className="mt-2 mb-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-ink-400 first:mt-0">
-                {cat.nome}
+                {emojiMinisterio(cat.nome)} {cat.nome}
               </div>
               {cat.funcoes.map((f) => {
                 const valor = atribuicoes[data]?.[f.id] ?? "";
                 const preenchido = valor.trim().length > 0;
+                const souEu = isAdmin ? false : currentUser.funcaoIds.includes(f.id);
+                const editavel = isAdmin || souEu;
 
                 return (
                   <div key={f.id} className="leader-row">
                     <span className="leader-label" title={f.nome}>
-                      {f.nome}
+                      {emojiFuncao(f.nome)} {f.nome}
                     </span>
                     <span className="leader-fill" />
-                    <input
-                      type="text"
-                      placeholder="Digite o nome..."
-                      value={valor}
-                      onChange={(e) => handleTextChange(data, f.id, e.target.value)}
-                      onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
-                      className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
-                    />
+                    {editavel ? (
+                      <input
+                        type="text"
+                        placeholder="Digite o nome..."
+                        value={valor}
+                        onChange={(e) => handleTextChange(data, f.id, e.target.value)}
+                        onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
+                        className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold uppercase text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:normal-case placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
+                      />
+                    ) : (
+                      <span className="max-w-[48%] flex-none truncate text-right text-[12px] font-semibold uppercase text-ink-400">
+                        {valor.trim() || "—"}
+                      </span>
+                    )}
                     <span
-                      className={"flex-none " + (preenchido ? "text-green-600" : "text-orange-500")}
+                      className={"flex-none text-[13px] " + (preenchido ? "" : "opacity-70")}
                       title={preenchido ? "Preenchido" : "Sem responsável"}
                     >
-                      {preenchido ? <IconCheck /> : <IconAlert />}
+                      {preenchido ? "✅" : "⚠️"}
                     </span>
                   </div>
                 );
@@ -266,6 +309,32 @@ export default function EscalaBoard({
     }
   }
 
+  /** Botão "Salvar": força o commit imediato de tudo que ainda estava esperando o debounce e avisa com um toast. */
+  async function handleSalvarTudo() {
+    const pendentes = Object.entries(saveTimers.current);
+    for (const [key, timer] of pendentes) {
+      clearTimeout(timer);
+      delete saveTimers.current[key];
+    }
+    setSalvandoTudo(true);
+    try {
+      await Promise.all(
+        pendentes.map(([key]) => {
+          const [data, funcaoId] = key.split(":");
+          const valor = (atribuicoes[data]?.[funcaoId] ?? "").trim().toUpperCase();
+          return definirAtribuicao(data, funcaoId, valor || null);
+        })
+      );
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setToast("Escala salva com sucesso! ✅");
+      toastTimer.current = setTimeout(() => setToast(null), 3000);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Não foi possível salvar tudo.");
+    } finally {
+      setSalvandoTudo(false);
+    }
+  }
+
   function categoriasDoDiaCompleto(diaSemana: number) {
     return categorias
       .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana)) }))
@@ -276,12 +345,16 @@ export default function EscalaBoard({
   function renderMinisterioCompacto(item: DiaInfo) {
     return categoriasDoDiaCompleto(item.diaSemana).map((cat) => (
       <div key={cat.id} className="mb-0.5">
-        <div className="mt-1 text-[8px] font-extrabold uppercase tracking-wide text-pdforange">{cat.nome}</div>
+        <div className="mt-1 text-[8px] font-extrabold uppercase tracking-wide text-pdforange">
+          {emojiMinisterio(cat.nome)} {cat.nome}
+        </div>
         {cat.funcoes.map((f) => {
           const nome = (atribuicoes[item.data]?.[f.id] ?? "").trim();
           return (
             <div key={f.id} className="leader-row !text-[10.5px]">
-              <span className="leader-label !max-w-[52%]">{f.nome}</span>
+              <span className="leader-label !max-w-[52%]">
+                {emojiFuncao(f.nome)} {f.nome}
+              </span>
               <span className="leader-fill" />
               <span
                 className={
@@ -304,7 +377,7 @@ export default function EscalaBoard({
     return categoriasDia.map((cat) => (
       <div key={cat.id} className="mb-3 break-inside-avoid rounded-xl bg-pdfgray p-3.5">
         <div className="mb-2 flex items-center gap-2 text-pdfblue">
-          <MinisterioIcon nome={cat.nome} />
+          <span className="text-[17px] leading-none">{emojiMinisterio(cat.nome)}</span>
           <span className="font-heading text-[12.5px] font-extrabold uppercase tracking-wide">{cat.nome}</span>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -315,7 +388,9 @@ export default function EscalaBoard({
                 key={f.id}
                 className={"flex items-baseline justify-between gap-3 pb-1.5 " + (i < cat.funcoes.length - 1 ? "border-b border-white" : "")}
               >
-                <span className="text-[11px] font-semibold text-ink-600">{f.nome}</span>
+                <span className="text-[11px] font-semibold text-ink-600">
+                  {emojiFuncao(f.nome)} {f.nome}
+                </span>
                 <span className={"text-right text-[12.5px] font-extrabold uppercase " + (nome ? "text-pdfblue" : "italic font-medium normal-case text-ink-400")}>
                   {nome || "não preenchido"}
                 </span>
@@ -343,8 +418,8 @@ export default function EscalaBoard({
 
   return (
     <div>
-      {showExport && (
-        <div className="no-print mb-4 flex flex-wrap items-center gap-3">
+      <div className="no-print mb-4 flex flex-wrap items-center gap-3">
+        {showExport && (
           <span className="mr-auto text-[12.5px] font-semibold text-ink-400">
             {temAlgumaFuncao && (
               <>
@@ -353,9 +428,25 @@ export default function EscalaBoard({
               </>
             )}
           </span>
+        )}
+        <button
+          type="button"
+          onClick={handleSalvarTudo}
+          disabled={salvandoTudo}
+          className={showExport ? "btn-secondary" : "btn-primary ml-auto"}
+        >
+          {salvandoTudo ? "Salvando..." : "💾 Salvar"}
+        </button>
+        {showExport && (
           <button type="button" onClick={() => handleExportClick("mes")} className="btn-primary">
-            <IconPdf /> Exportar PDF do mês
+            📄 Exportar PDF do mês
           </button>
+        )}
+      </div>
+
+      {toast && (
+        <div className="no-print fixed bottom-5 right-5 z-50 rounded-xl bg-ink-900 px-4 py-3 text-sm font-semibold text-white shadow-soft-lift">
+          {toast}
         </div>
       )}
 
@@ -363,8 +454,8 @@ export default function EscalaBoard({
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-5">
           <div className="max-h-[82vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-6 shadow-soft-lift">
             <div className="mb-2 flex items-center gap-2.5">
-              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-red-50 text-red-500">
-                <IconAlert size={17} />
+              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-red-50 text-[18px]">
+                ⚠️
               </span>
               <h3 className="font-heading text-base font-extrabold text-ink-900">Escala incompleta</h3>
             </div>

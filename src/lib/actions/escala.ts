@@ -12,7 +12,7 @@ import { verifySession } from "@/lib/auth/dal";
  */
 export async function definirAtribuicao(data: string, funcaoId: string, nome: string | null) {
   const me = await verifySession();
-  const nomeLimpo = nome?.trim() || null;
+  const nomeLimpo = nome?.trim().toUpperCase() || null;
 
   if (me.role !== "ADMIN" && !me.funcaoIds.includes(funcaoId)) {
     throw new Error("Você não tem habilitação para esta função.");

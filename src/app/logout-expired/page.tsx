@@ -1,8 +1,14 @@
-import Link from "next/link";
-import { deleteSession } from "@/lib/auth/session";
+"use client";
 
-export default async function LogoutExpiredPage() {
-  await deleteSession();
+import { useEffect } from "react";
+import Link from "next/link";
+import { encerrarSessaoExpirada } from "@/lib/actions/auth";
+
+export default function LogoutExpiredPage() {
+  useEffect(() => {
+    encerrarSessaoExpirada();
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
       <h1 className="font-heading text-xl font-extrabold text-ink-900">Sessão encerrada</h1>

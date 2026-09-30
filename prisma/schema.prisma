@@ -19,6 +19,9 @@ model User {
   passwordHash String?
   role         Role     @default(VOLUNTARIO)
   ativo        Boolean  @default(true)
+  /// Voluntário com verTudo=true enxerga a escala inteira (como o admin),
+  /// mas só edita as próprias funções — default é ver só o que é dele.
+  verTudo      Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   funcoes     UserFuncao[]

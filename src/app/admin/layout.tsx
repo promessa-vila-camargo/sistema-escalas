@@ -9,6 +9,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <TopNav
         user={user}
         tabs={[
+          { href: "/admin", label: "Início" },
           { href: "/admin/escala", label: "Escala" },
           { href: "/admin/pessoas", label: "Pessoas" },
         ]}

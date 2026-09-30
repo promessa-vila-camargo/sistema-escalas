@@ -10,6 +10,7 @@ export type CurrentUser = {
   nome: string;
   role: "ADMIN" | "VOLUNTARIO";
   funcaoIds: string[];
+  verTudo: boolean;
 };
 
 /**
@@ -39,13 +40,14 @@ export const verifySession = cache(async (): Promise<CurrentUser> => {
     nome: user.nome,
     role: user.role,
     funcaoIds: user.funcoes.map((f) => f.funcaoId),
+    verTudo: user.verTudo,
   };
 });
 
 export const verifyAdmin = cache(async (): Promise<CurrentUser> => {
   const user = await verifySession();
   if (user.role !== "ADMIN") {
-    redirect("/escala");
+    redirect("/inicio");
   }
   return user;
 });

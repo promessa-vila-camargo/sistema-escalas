@@ -38,7 +38,7 @@ export default async function EscalaVoluntarioPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <TopNav user={user} />
+      <TopNav user={user} tabs={[{ href: "/inicio", label: "Início" }, { href: "/escala", label: "Escala" }]} />
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-7">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>

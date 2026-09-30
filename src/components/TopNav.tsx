@@ -32,7 +32,7 @@ export default function TopNav({
         {tabs && (
           <nav className="flex items-center gap-1 rounded-lg bg-brand-50 p-1">
             {tabs.map((tab) => {
-              const active = pathname?.startsWith(tab.href);
+              const active = tab.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(tab.href);
               return (
                 <Link
                   key={tab.href}
