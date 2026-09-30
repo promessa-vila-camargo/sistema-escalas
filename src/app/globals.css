@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #1f2937;
+}
+
+@theme {
+  /*
+   * Paleta da Promessa Vila Camargo: base neutra fria (a ponta clara da
+   * escala) derivada do azul-marinho da logo, e laranja da chama como único
+   * acento de ação (botões, links, estados ativos) — nunca cor de fundo.
+   */
+  --color-brand-50: #eef3f8;
+  --color-brand-100: #dde7f1;
+  --color-brand-200: #bcd0e3;
+  --color-brand-300: #8fb0cc;
+  --color-brand-500: #2d6398;
+  --color-brand-600: #1b4e7f;
+  --color-brand-700: #123b5e;
+  --color-brand-900: #0a2740;
+
+  --color-orange-50: #fdf1e1;
+  --color-orange-100: #fbe0c0;
+  --color-orange-500: #e8920f;
+  --color-orange-600: #c97a0a;
+  --color-orange-700: #ad6708;
+
+  --color-ink-900: #1f2937;
+  --color-ink-600: #6b7280;
+  --color-ink-400: #9ca3af;
+
+  --color-green-50: #e7f5ec;
+  --color-green-600: #1e7a46;
+
+  --color-red-50: #fbeae7;
+  --color-red-500: #b5473a;
+  --color-red-600: #9a3b30;
+
+  --shadow-soft: 0 1px 2px 0 rgb(16 24 32 / 0.05), 0 6px 16px -4px rgb(16 24 32 / 0.08);
+  --shadow-soft-lift: 0 2px 8px 0 rgb(16 24 32 / 0.08), 0 20px 36px -12px rgb(16 24 32 / 0.16);
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans-body), Arial, Helvetica, sans-serif;
+  --font-heading: var(--font-sans-heading), Arial, Helvetica, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-orange-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-xl border border-brand-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100;
+  }
+
+  /* Tailwind v4 não deixa @apply de uma classe custom dentro de outra — cada
+     variante de botão repete a base em vez de "@apply btn". */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-orange-600 text-white hover:bg-orange-700;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-brand-700 text-white hover:bg-brand-900;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-red-500 text-white hover:bg-red-600;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 text-sm font-semibold tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 bg-transparent px-0 py-0 text-ink-600 underline hover:text-ink-900;
+  }
+
+  .link {
+    @apply text-sm text-orange-600 underline decoration-orange-100 underline-offset-2 transition-colors duration-200 hover:text-orange-700 hover:decoration-orange-500;
+  }
+  .link-danger {
+    @apply text-red-600 underline decoration-red-50 underline-offset-2 transition-colors duration-200 hover:text-red-600;
+  }
+
+  .card {
+    @apply rounded-2xl border border-brand-100 bg-white p-6 shadow-soft sm:p-7;
+  }
+
+  .form-message-error {
+    @apply flex items-start gap-1.5 text-sm text-red-600;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-positive {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-50 text-green-600;
+  }
+  .badge-negative {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-ink-900/5 text-ink-600;
+  }
+  .badge-neutral {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-orange-50 text-orange-700;
+  }
+
+  .empty-state {
+    @apply rounded-xl border border-brand-100 bg-white p-4 text-sm text-ink-600;
+  }
+
+  /* Friso de assinatura no topo de cartões — mesmas três cores da marca. */
+  .gradient-bar {
+    @apply h-1 w-full rounded-full bg-gradient-to-r from-brand-700 via-orange-500 to-orange-600;
+  }
+
+  /* Linha "função .... pessoa" com pontilhado entre o rótulo e o valor —
+     usada no quadro de escala (tela e impressão). */
+  .leader-row {
+    @apply flex items-center gap-1 py-0.5 text-[13px];
+  }
+  .leader-label {
+    @apply flex-none text-ink-600 font-medium truncate max-w-[48%];
+  }
+  .leader-fill {
+    @apply flex-1 border-b border-dotted border-brand-200 mx-1;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

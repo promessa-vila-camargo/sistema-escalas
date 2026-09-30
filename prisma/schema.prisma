@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VOLUNTARIO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  nome         String
+  username     String?  @unique
+  passwordHash String?
+  role         Role     @default(VOLUNTARIO)
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  funcoes     UserFuncao[]
+  atribuicoes Atribuicao[]
+}
+
+model Categoria {
+  id    String @id @default(cuid())
+  nome  String
+  ordem Int    @default(0)
+
+  funcoes Funcao[]
+}
+
+model Funcao {
+  id          String @id @default(cuid())
+  nome        String
+  ordem       Int    @default(0)
+  categoriaId String
+
+  categoria   Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  usuarios    UserFuncao[]
+  atribuicoes Atribuicao[]
+}
+
+/** Uma linha por (pessoa, função que ela está habilitada a exercer). */
+model UserFuncao {
+  id       String @id @default(cuid())
+  userId   String
+  funcaoId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, funcaoId])
+}
+
+/**
+ * Uma linha por (data do culto, função) — existe sempre que alguém preenche
+ * aquela função naquele culto. userId nulo não deveria persistir (tirar
+ * alguém apaga a linha), mas fica opcional para suportar "desmarcar" sem
+ * apagar o registro caso vire útil manter histórico depois.
+ */
+model Atribuicao {
+  id       String   @id @default(cuid())
+  data     DateTime @db.Date
+  funcaoId String
+  userId   String?
+
+  funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([data, funcaoId])
+}
