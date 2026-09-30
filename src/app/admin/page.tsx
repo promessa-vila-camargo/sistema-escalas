@@ -80,10 +80,10 @@ export default async function AdminHomePage() {
   const linkEscalaProxima = proxima ? `/admin/escala?ano=${anoP}&mes=${mesP}` : "/admin/escala";
 
   let linkWhatsapp: string | null = null;
-  if (proxima && pctProxima === 100) {
+  if (proxima && funcoesProxima.length > 0) {
     const linhas = funcoesProxima.map((f) => {
       const nome = (atribuicoesMes[proxima.data]?.[f.funcaoId] ?? "").trim();
-      return `${emojiMinisterio(f.catNome)} ${f.funcaoNome}: ${nome}`;
+      return `${emojiMinisterio(f.catNome)} ${f.funcaoNome}: ${nome || "❌ (pendente)"}`;
     });
     const nota = (observacoesMes[proxima.data] ?? "").trim();
     const texto = [
