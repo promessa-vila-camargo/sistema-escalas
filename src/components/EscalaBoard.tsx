@@ -13,7 +13,7 @@ export type AtribuicaoMap = Record<string, Record<string, string | null>>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
 type PrintTarget = "mes" | DiaInfo;
-type GrupoKey = "fds" | "meio";
+type ParFds = { sab: DiaInfo | null; dom: DiaInfo | null };
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -34,7 +34,6 @@ export default function EscalaBoard({
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [, startTransition] = useTransition();
-  const [mobileGrupo, setMobileGrupo] = useState<GrupoKey>("fds");
   const [confirmando, setConfirmando] = useState<{
     alvo: PrintTarget;
     pendentes: { data: string; dia: number; diaSemana: number; faltando: string[] }[];
@@ -43,12 +42,26 @@ export default function EscalaBoard({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
-  const grupos = useMemo(() => {
-    const fds = [...dias.sab, ...dias.dom].sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
-    return [
-      { key: "fds" as GrupoKey, label: "Fim de Semana", itens: fds },
-      { key: "meio" as GrupoKey, label: "Meio de Semana", itens: dias.qua },
-    ];
+
+  /** Agrupa sábado com o domingo seguinte — pra aparecerem lado a lado, como um fim de semana só. */
+  const fdsPares = useMemo(() => {
+    const domPorData = new Map(dias.dom.map((d) => [d.data, d]));
+    const usados = new Set<string>();
+    const pares: ParFds[] = [];
+    for (const s of dias.sab) {
+      const domStr = domingoSeguinte(s.data);
+      const d = domPorData.get(domStr) ?? null;
+      if (d) usados.add(d.data);
+      pares.push({ sab: s, dom: d });
+    }
+    for (const d of dias.dom) {
+      if (!usados.has(d.data)) pares.push({ sab: null, dom: d });
+    }
+    return pares.sort((a, b) => {
+      const da = (a.sab ?? a.dom)!.data;
+      const db = (b.sab ?? b.dom)!.data;
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
   }, [dias]);
   const isAdmin = currentUser.role === "ADMIN";
   const temAlgumaFuncao = categorias.some((c) => c.funcoes.length > 0);
@@ -391,37 +404,35 @@ export default function EscalaBoard({
         </div>
       )}
 
-      <div className="mb-4 flex gap-1.5 sm:hidden print:hidden">
-        {grupos.map((g) => (
-          <button
-            key={g.key}
-            onClick={() => setMobileGrupo(g.key)}
-            className={
-              "flex-1 rounded-lg border px-2 py-2 text-[13px] font-bold transition-colors " +
-              (mobileGrupo === g.key
-                ? "border-orange-600 bg-orange-600 text-white"
-                : "border-brand-100 bg-white text-ink-600")
-            }
-          >
-            {g.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 print:hidden">
-        {grupos.map((g) => (
-          <div key={g.key} className={"flex flex-col gap-3.5 " + (mobileGrupo === g.key ? "" : "hidden sm:flex")}>
-            <div className="flex items-baseline justify-between px-0.5">
-              <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">{g.label}</span>
-              <span className="text-xs font-semibold tabular-nums text-ink-400">{g.itens.length}</span>
-            </div>
-            {g.itens.length === 0 ? (
-              <div className="empty-state">Nenhum culto neste mês.</div>
-            ) : (
-              g.itens.map((d) => renderCard(d.data, d.dia, d.diaSemana))
-            )}
+      <div className="print:hidden">
+        <div className="mb-3 flex items-baseline justify-between px-0.5">
+          <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">Fim de Semana</span>
+          <span className="text-xs font-semibold tabular-nums text-ink-400">{fdsPares.length} fim(ns) de semana</span>
+        </div>
+        {fdsPares.length === 0 ? (
+          <div className="empty-state mb-6">Nenhum culto de fim de semana neste mês.</div>
+        ) : (
+          <div className="mb-6 flex flex-col gap-4">
+            {fdsPares.map((par) => (
+              <div key={(par.sab ?? par.dom)!.data} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {par.sab ? renderCard(par.sab.data, par.sab.dia, par.sab.diaSemana) : <div />}
+                {par.dom ? renderCard(par.dom.data, par.dom.dia, par.dom.diaSemana) : <div />}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        <div className="mb-3 flex items-baseline justify-between px-0.5">
+          <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">Meio de Semana</span>
+          <span className="text-xs font-semibold tabular-nums text-ink-400">{dias.qua.length}</span>
+        </div>
+        {dias.qua.length === 0 ? (
+          <div className="empty-state">Nenhum culto de meio de semana neste mês.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {dias.qua.map((d) => renderCard(d.data, d.dia, d.diaSemana))}
+          </div>
+        )}
       </div>
 
       {/* ---- PDF do mês inteiro (compacto, 2 colunas) ---- */}
