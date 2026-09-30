@@ -27,6 +27,13 @@ export function chaveNoite(data: string) {
   return `${data}|noite`;
 }
 
+/**
+ * Funções em que sábado e domingo são pessoas diferentes por natureza —
+ * escalar no sábado NÃO repete automaticamente no domingo (diferente das
+ * demais funções, que valem pro fim de semana inteiro).
+ */
+export const FUNCOES_SEM_REPETICAO_DOMINGO = ["Diretor(a)", "Palavra Pastoral", "Pregador"];
+
 export function fmtDDMM(y: number, m: number, d: number) {
   return `${pad2(d)}/${pad2(m + 1)}`;
 }

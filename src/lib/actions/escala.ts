@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/auth/dal";
-import { chaveNoite } from "@/lib/datas";
+import { chaveNoite, FUNCOES_SEM_REPETICAO_DOMINGO } from "@/lib/datas";
 
 export type Turno = "DIA" | "NOITE";
 
@@ -15,7 +15,9 @@ export type Turno = "DIA" | "NOITE";
  *
  * `turno` distingue o culto normal ("DIA") de um evento extra à noite no
  * mesmo dia ("NOITE") — ver definirEventoNoite. O espelho automático de
- * sábado pra domingo só vale pro turno DIA.
+ * sábado pra domingo só vale pro turno DIA, e não vale pras funções em
+ * FUNCOES_SEM_REPETICAO_DOMINGO (diretor, palavra pastoral, pregador —
+ * pessoas diferentes em cada dia).
  */
 export async function definirAtribuicao(data: string, funcaoId: string, nome: string | null, turno: Turno = "DIA") {
   const me = await verifySession();
@@ -34,7 +36,7 @@ export async function definirAtribuicao(data: string, funcaoId: string, nome: st
   // normal (o evento da noite não se propaga).
   if (turno === "DIA" && dataObj.getUTCDay() === 6) {
     const funcao = await prisma.funcao.findUnique({ where: { id: funcaoId } });
-    if (funcao?.diasSemana.includes(0)) {
+    if (funcao?.diasSemana.includes(0) && !FUNCOES_SEM_REPETICAO_DOMINGO.includes(funcao.nome)) {
       const domingo = new Date(dataObj);
       domingo.setUTCDate(domingo.getUTCDate() + 1);
       await gravar(domingo, funcaoId, nomeLimpo, turno);

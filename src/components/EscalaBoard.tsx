@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { definirAtribuicao, definirObservacao, definirEventoNoite, type Turno } from "@/lib/actions/escala";
-import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes, chaveNoite } from "@/lib/datas";
+import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes, chaveNoite, FUNCOES_SEM_REPETICAO_DOMINGO } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
 const EMOJI_MINISTERIO: Record<string, string> = {
@@ -156,7 +156,7 @@ export default function EscalaBoard({
     return chave.endsWith("|noite") ? { data: chave.slice(0, -"|noite".length), turno: "NOITE" } : { data: chave, turno: "DIA" };
   }
 
-  /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). Só vale pro turno DIA. */
+  /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). Só vale pro turno DIA, e não pras funções em FUNCOES_SEM_REPETICAO_DOMINGO. */
   function applyLocalChange(chave: string, funcaoId: string, value: string) {
     setAtribuicoes((old) => {
       const next = { ...old, [chave]: { ...old[chave], [funcaoId]: value } };
@@ -164,7 +164,7 @@ export default function EscalaBoard({
       if (turno === "DIA") {
         const diaSemana = new Date(data).getUTCDay();
         const funcao = funcaoById(funcaoId);
-        if (diaSemana === 6 && funcao?.diasSemana.includes(0)) {
+        if (diaSemana === 6 && funcao?.diasSemana.includes(0) && !FUNCOES_SEM_REPETICAO_DOMINGO.includes(funcao.nome)) {
           const dom = domingoSeguinte(data);
           next[dom] = { ...next[dom], [funcaoId]: value };
         }
