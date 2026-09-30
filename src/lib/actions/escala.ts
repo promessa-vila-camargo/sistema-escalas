@@ -6,27 +6,16 @@ import { verifySession } from "@/lib/auth/dal";
 
 /**
  * Admin pode escrever qualquer nome em qualquer função (texto livre, sem
- * exigir cadastro prévio). Voluntário só pode preencher/limpar em função
- * que ele tem habilitação, e só se a vaga estiver vazia ou já tiver o
- * próprio nome dele (não pode apagar o nome de outra pessoa digitado ali).
+ * exigir cadastro prévio). Voluntário só mexe nas funções que o admin
+ * atribuiu a ele ao criar o login — mas dentro dessas, tem liberdade total:
+ * escreve o nome de quem quiser (não só o próprio), troca ou apaga.
  */
 export async function definirAtribuicao(data: string, funcaoId: string, nome: string | null) {
   const me = await verifySession();
   const nomeLimpo = nome?.trim() || null;
 
-  if (me.role !== "ADMIN") {
-    if (!me.funcaoIds.includes(funcaoId)) {
-      throw new Error("Você não tem habilitação para esta função.");
-    }
-    const atual = await prisma.atribuicao.findUnique({ where: { data_funcaoId: { data: new Date(data), funcaoId } } });
-    const nomeAtual = atual?.nomeEscalado?.trim().toLowerCase() || null;
-    const souEu = nomeAtual === me.nome.trim().toLowerCase();
-    if (nomeAtual && !souEu) {
-      throw new Error("Essa função já está preenchida por outra pessoa.");
-    }
-    if (nomeLimpo && nomeLimpo.toLowerCase() !== me.nome.trim().toLowerCase()) {
-      throw new Error("Você só pode escrever o próprio nome aqui.");
-    }
+  if (me.role !== "ADMIN" && !me.funcaoIds.includes(funcaoId)) {
+    throw new Error("Você não tem habilitação para esta função.");
   }
 
   if (!nomeLimpo) {

@@ -46,12 +46,28 @@ export default function EscalaBoard({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
-  const totalFuncoes = useMemo(() => categorias.reduce((n, c) => n + c.funcoes.length, 0), [categorias]);
   const isAdmin = currentUser.role === "ADMIN";
+
+  /**
+   * Voluntário só vê os ministérios/funções que o admin atribuiu ao login
+   * dele — o resto do quadro nem aparece (não é só "travado", some mesmo).
+   * Admin continua vendo tudo, para escalar qualquer função.
+   */
+  const categoriasVisiveis = useMemo(() => {
+    if (isAdmin) return categorias;
+    return categorias
+      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => currentUser.funcaoIds.includes(f.id)) }))
+      .filter((c) => c.funcoes.length > 0);
+  }, [categorias, isAdmin, currentUser.funcaoIds]);
+
+  const totalFuncoes = useMemo(
+    () => categoriasVisiveis.reduce((n, c) => n + c.funcoes.length, 0),
+    [categoriasVisiveis]
+  );
 
   function missingList(data: string) {
     const out: string[] = [];
-    for (const cat of categorias) {
+    for (const cat of categoriasVisiveis) {
       for (const f of cat.funcoes) {
         if (!atribuicoes[data]?.[f.id]?.trim()) out.push(f.nome);
       }
@@ -124,11 +140,15 @@ export default function EscalaBoard({
           )}
         </div>
 
-        {categorias.length === 0 && (
-          <p className="text-[11.5px] text-ink-400">Cadastre ministérios e funções em Pessoas.</p>
+        {categoriasVisiveis.length === 0 && (
+          <p className="text-[11.5px] text-ink-400">
+            {isAdmin
+              ? "Cadastre ministérios e funções em Pessoas."
+              : "Nenhuma função foi atribuída ao seu login ainda. Fale com o administrador."}
+          </p>
         )}
 
-        {categorias.map((cat) => {
+        {categoriasVisiveis.map((cat) => {
           if (cat.funcoes.length === 0) return null;
           return (
             <div key={cat.id} className="mb-0.5">
@@ -138,10 +158,6 @@ export default function EscalaBoard({
               {cat.funcoes.map((f) => {
                 const valor = atribuicoes[data]?.[f.id] ?? "";
                 const preenchido = valor.trim().length > 0;
-                const meuNome = currentUser.nome.trim().toLowerCase();
-                const souEu = valor.trim().toLowerCase() === meuNome;
-                const habilitado = currentUser.funcaoIds.includes(f.id);
-                const editavel = isAdmin || (habilitado && (!preenchido || souEu));
 
                 return (
                   <div key={f.id} className="leader-row">
@@ -149,20 +165,14 @@ export default function EscalaBoard({
                       {f.nome}
                     </span>
                     <span className="leader-fill" />
-                    {editavel ? (
-                      <input
-                        type="text"
-                        placeholder="Digite o nome..."
-                        value={valor}
-                        onChange={(e) => handleTextChange(data, f.id, e.target.value)}
-                        onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
-                        className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
-                      />
-                    ) : (
-                      <span className="flex-none truncate text-[11.5px] font-medium text-ink-400">
-                        {valor.trim() || "—"}
-                      </span>
-                    )}
+                    <input
+                      type="text"
+                      placeholder="Digite o nome..."
+                      value={valor}
+                      onChange={(e) => handleTextChange(data, f.id, e.target.value)}
+                      onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
+                      className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
+                    />
                     <span
                       className={"flex-none text-[11px] " + (preenchido ? "text-green-600" : "text-orange-500")}
                       title={preenchido ? "Preenchido" : "Sem responsável"}
