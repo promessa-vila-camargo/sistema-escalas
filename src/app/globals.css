@@ -33,6 +33,13 @@
   --color-green-50: #e7f5ec;
   --color-green-600: #1e7a46;
 
+  /* Cores oficiais da identidade da Promessa VC, usadas no PDF de escala
+     (documento pra WhatsApp) — hex exatos pedidos, à parte da paleta de UI
+     acima pra não misturar "cor de sistema" com "cor de peça gráfica". */
+  --color-pdfblue: #004b83;
+  --color-pdforange: #e18800;
+  --color-pdfgray: #f2f4f7;
+
   --color-red-50: #fbeae7;
   --color-red-500: #b5473a;
   --color-red-600: #9a3b30;

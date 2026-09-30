@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { definirAtribuicao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
+import MinisterioIcon from "./MinisterioIcon";
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
@@ -80,6 +81,35 @@ export default function EscalaBoard({
     return out;
   }
 
+  function funcaoById(funcaoId: string) {
+    for (const cat of categorias) {
+      const f = cat.funcoes.find((x) => x.id === funcaoId);
+      if (f) return f;
+    }
+    return null;
+  }
+
+  /** Domingo seguinte de uma data de sábado, como string "YYYY-MM-DD" (UTC, sem deslocar dia). */
+  function domingoSeguinte(data: string) {
+    const d = new Date(data);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). */
+  function applyLocalChange(data: string, funcaoId: string, value: string) {
+    setAtribuicoes((old) => {
+      const next = { ...old, [data]: { ...old[data], [funcaoId]: value } };
+      const diaSemana = new Date(data).getUTCDay();
+      const funcao = funcaoById(funcaoId);
+      if (diaSemana === 6 && funcao?.diasSemana.includes(0)) {
+        const dom = domingoSeguinte(data);
+        next[dom] = { ...next[dom], [funcaoId]: value };
+      }
+      return next;
+    });
+  }
+
   function commitSave(data: string, funcaoId: string, nome: string | null) {
     startTransition(async () => {
       try {
@@ -91,7 +121,7 @@ export default function EscalaBoard({
   }
 
   function handleTextChange(data: string, funcaoId: string, value: string) {
-    setAtribuicoes((old) => ({ ...old, [data]: { ...old[data], [funcaoId]: value } }));
+    applyLocalChange(data, funcaoId, value);
     const key = `${data}:${funcaoId}`;
     if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
     saveTimers.current[key] = setTimeout(() => commitSave(data, funcaoId, value), SAVE_DEBOUNCE_MS);
@@ -222,53 +252,79 @@ export default function EscalaBoard({
     }
   }
 
-  function renderMinisterioBloco(item: DiaInfo, compact: boolean) {
-    const categoriasDia = categorias
-      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(item.diaSemana)) }))
+  function categoriasDoDiaCompleto(diaSemana: number) {
+    return categorias
+      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana)) }))
       .filter((c) => c.funcoes.length > 0);
-    return categoriasDia.map((cat) => {
-      if (cat.funcoes.length === 0) return null;
-      return (
-        <div key={cat.id} className={compact ? "mb-0.5" : "mb-4"}>
-          <div
-            className={
-              compact
-                ? "mt-1 text-[8.5px] font-extrabold uppercase tracking-wide text-orange-600"
-                : "mb-2 border-b-2 border-orange-500 pb-1 font-heading text-[13px] font-extrabold uppercase tracking-wide text-brand-700"
-            }
-          >
-            {cat.nome}
-          </div>
-          {cat.funcoes.map((f) => {
+  }
+
+  /** Bloco compacto (PDF do mês inteiro — muitos cultos na mesma folha). */
+  function renderMinisterioCompacto(item: DiaInfo) {
+    return categoriasDoDiaCompleto(item.diaSemana).map((cat) => (
+      <div key={cat.id} className="mb-0.5">
+        <div className="mt-1 text-[8px] font-extrabold uppercase tracking-wide text-pdforange">{cat.nome}</div>
+        {cat.funcoes.map((f) => {
+          const nome = (atribuicoes[item.data]?.[f.id] ?? "").trim();
+          return (
+            <div key={f.id} className="leader-row !text-[10.5px]">
+              <span className="leader-label !max-w-[52%]">{f.nome}</span>
+              <span className="leader-fill" />
+              <span
+                className={
+                  "flex-none max-w-[46%] truncate text-[10.5px] font-bold uppercase " +
+                  (nome ? "text-pdfblue" : "italic font-medium normal-case text-ink-400")
+                }
+              >
+                {nome || "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    ));
+  }
+
+  /** Coluna espaçosa (PDF de um culto/fim de semana) — um cartão por ministério, com ícone. */
+  function renderColunaCulto(item: DiaInfo) {
+    const categoriasDia = categoriasDoDiaCompleto(item.diaSemana);
+    return categoriasDia.map((cat) => (
+      <div key={cat.id} className="mb-3 break-inside-avoid rounded-xl bg-pdfgray p-3.5">
+        <div className="mb-2 flex items-center gap-2 text-pdfblue">
+          <MinisterioIcon nome={cat.nome} />
+          <span className="font-heading text-[12.5px] font-extrabold uppercase tracking-wide">{cat.nome}</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {cat.funcoes.map((f, i) => {
             const nome = (atribuicoes[item.data]?.[f.id] ?? "").trim();
-            if (compact) {
-              return (
-                <div key={f.id} className="leader-row !text-[10.5px]">
-                  <span className="leader-label !max-w-[52%]">{f.nome}</span>
-                  <span className="leader-fill" />
-                  <span
-                    className={
-                      "flex-none max-w-[46%] truncate text-[10.5px] font-bold " +
-                      (nome ? "text-ink-900" : "italic font-medium text-ink-400")
-                    }
-                  >
-                    {nome || "—"}
-                  </span>
-                </div>
-              );
-            }
             return (
-              <div key={f.id} className="mb-2.5 flex items-baseline justify-between gap-4 border-b border-dotted border-brand-200 pb-1.5">
-                <span className="text-[13px] font-semibold text-ink-600">{f.nome}</span>
-                <span className={"text-right text-[14px] font-bold " + (nome ? "text-ink-900" : "italic font-medium text-ink-400")}>
+              <div
+                key={f.id}
+                className={"flex items-baseline justify-between gap-3 pb-1.5 " + (i < cat.funcoes.length - 1 ? "border-b border-white" : "")}
+              >
+                <span className="text-[11px] font-semibold text-ink-600">{f.nome}</span>
+                <span className={"text-right text-[12.5px] font-extrabold uppercase " + (nome ? "text-pdfblue" : "italic font-medium normal-case text-ink-400")}>
                   {nome || "não preenchido"}
                 </span>
               </div>
             );
           })}
         </div>
-      );
-    });
+      </div>
+    ));
+  }
+
+  /** Encontra o outro dia do mesmo fim de semana (sábado <-> domingo seguinte), se existir no mês. */
+  function encontrarParDeFds(item: DiaInfo): { sab: DiaInfo; dom: DiaInfo } | null {
+    if (item.diaSemana === 6) {
+      const domStr = domingoSeguinte(item.data);
+      const dom = dias.dom.find((d) => d.data === domStr);
+      return dom ? { sab: item, dom } : null;
+    }
+    if (item.diaSemana === 0) {
+      const sab = dias.sab.find((s) => domingoSeguinte(s.data) === item.data);
+      return sab ? { sab, dom: item } : null;
+    }
+    return null;
   }
 
   return (
@@ -370,11 +426,11 @@ export default function EscalaBoard({
       {/* ---- PDF do mês inteiro (compacto, 2 colunas) ---- */}
       {printTarget === "mes" && (
         <div className="hidden print:block">
-          <div className="mb-4 flex items-center gap-3 border-b-2 border-brand-700 pb-3">
+          <div className="mb-4 flex items-center gap-3 border-b-2 border-pdfblue pb-3">
             <img src="/logo-icon.png" alt="" className="h-9 w-9 rounded-full" />
             <div className="flex flex-col">
-              <span className="font-heading text-base font-extrabold text-brand-700">
-                Escala de Ministérios — Promessa Vila Camargo
+              <span className="font-heading text-base font-extrabold text-pdfblue">
+                Escala de Serviço — Promessa Vila Camargo
               </span>
               <span className="text-[11px] font-semibold text-ink-600">
                 {nomeMes(mes)} de {ano}
@@ -383,42 +439,86 @@ export default function EscalaBoard({
           </div>
           <div className="columns-2 gap-6">
             {diasDoMes.map((d) => (
-              <div key={d.data} className="mb-3 break-inside-avoid border-b border-brand-100 pb-2.5">
-                <div className="mb-1 font-heading text-[11.5px] font-extrabold uppercase tracking-wide text-brand-700">
+              <div key={d.data} className="mb-3 break-inside-avoid border-b border-pdfgray pb-2.5">
+                <div className="mb-1 font-heading text-[11.5px] font-extrabold uppercase tracking-wide text-pdfblue">
                   {nomeDiaSemana(d.diaSemana)} • {fmtDDMM(ano, mes, d.dia)}/{ano}
                 </div>
-                {renderMinisterioBloco(d, true)}
+                {renderMinisterioCompacto(d)}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ---- PDF de um único culto (documento oficial, espaçoso) ---- */}
+      {/* ---- PDF de um culto / fim de semana (documento oficial, espaçoso) ---- */}
       {printTarget && printTarget !== "mes" && (
         <div className="hidden print:block">
-          <div className="mb-6 flex items-center gap-4 border-b-4 border-brand-700 pb-4">
+          <div className="mb-7 flex items-center gap-4 border-b-4 border-pdfblue pb-4">
             <img src="/logo-icon.png" alt="" className="h-16 w-16 rounded-full" />
             <div className="flex flex-col">
-              <span className="font-heading text-[10px] font-bold uppercase tracking-[0.15em] text-orange-600">
+              <span className="font-heading text-[10px] font-bold uppercase tracking-[0.2em] text-pdforange">
                 Promessa Vila Camargo
               </span>
-              <span className="font-heading text-2xl font-extrabold text-brand-700">Escala de Ministérios</span>
+              <span className="font-heading text-[26px] font-extrabold text-pdfblue">Escala de Serviço</span>
             </div>
             <div className="ml-auto text-right">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Data</div>
-              <div className="font-heading text-lg font-extrabold text-ink-900">
-                {fmtDDMM(ano, mes, printTarget.dia)}/{ano}
-              </div>
-              <div className="text-[12px] font-semibold text-ink-600">{nomeDiaSemana(printTarget.diaSemana)}</div>
+              {(() => {
+                const par = encontrarParDeFds(printTarget);
+                if (par) {
+                  return (
+                    <>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Fim de semana</div>
+                      <div className="font-heading text-lg font-extrabold text-pdfblue">
+                        {fmtDDMM(ano, mes, par.sab.dia)} – {fmtDDMM(ano, mes, par.dom.dia)}/{ano}
+                      </div>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Data</div>
+                    <div className="font-heading text-lg font-extrabold text-pdfblue">
+                      {fmtDDMM(ano, mes, printTarget.dia)}/{ano}
+                    </div>
+                    <div className="text-[12px] font-semibold text-ink-600">{nomeDiaSemana(printTarget.diaSemana)}</div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-10">{renderMinisterioBloco(printTarget, false)}</div>
+          {(() => {
+            const par = encontrarParDeFds(printTarget);
+            if (par) {
+              return (
+                <div className="grid grid-cols-2 gap-x-8">
+                  <div>
+                    <div className="mb-3 rounded-full bg-pdfblue px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
+                      Sábado · {fmtDDMM(ano, mes, par.sab.dia)}
+                    </div>
+                    {renderColunaCulto(par.sab)}
+                  </div>
+                  <div>
+                    <div className="mb-3 rounded-full bg-pdforange px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
+                      Domingo · {fmtDDMM(ano, mes, par.dom.dia)}
+                    </div>
+                    {renderColunaCulto(par.dom)}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="mx-auto max-w-md">
+                <div className="mb-3 rounded-full bg-pdfblue px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
+                  4ª feira · {fmtDDMM(ano, mes, printTarget.dia)}
+                </div>
+                {renderColunaCulto(printTarget)}
+              </div>
+            );
+          })()}
 
-          <div className="mt-10 border-t border-brand-100 pt-3 text-center text-[10px] text-ink-400">
-            Escala de Ministérios · Promessa Vila Camargo · gerado em{" "}
-            {new Date().toLocaleDateString("pt-BR")}
+          <div className="mt-10 border-t border-pdfgray pt-3 text-center text-[10px] text-ink-400">
+            Escala de Serviço · Promessa Vila Camargo · gerado em {new Date().toLocaleDateString("pt-BR")}
           </div>
         </div>
       )}

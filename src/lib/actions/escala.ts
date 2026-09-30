@@ -18,18 +18,35 @@ export async function definirAtribuicao(data: string, funcaoId: string, nome: st
     throw new Error("Você não tem habilitação para esta função.");
   }
 
-  if (!nomeLimpo) {
-    await prisma.atribuicao.deleteMany({ where: { data: new Date(data), funcaoId } });
-  } else {
-    await prisma.atribuicao.upsert({
-      where: { data_funcaoId: { data: new Date(data), funcaoId } },
-      update: { nomeEscalado: nomeLimpo, userId: null },
-      create: { data: new Date(data), funcaoId, nomeEscalado: nomeLimpo },
-    });
+  const dataObj = new Date(data);
+  await gravar(dataObj, funcaoId, nomeLimpo);
+
+  // Domingo repete automaticamente o que foi escalado no sábado daquele
+  // mesmo fim de semana, pra função continuar valendo nos dois dias sem
+  // digitar duas vezes — só quando a edição parte do sábado.
+  if (dataObj.getUTCDay() === 6) {
+    const funcao = await prisma.funcao.findUnique({ where: { id: funcaoId } });
+    if (funcao?.diasSemana.includes(0)) {
+      const domingo = new Date(dataObj);
+      domingo.setUTCDate(domingo.getUTCDate() + 1);
+      await gravar(domingo, funcaoId, nomeLimpo);
+    }
   }
 
   revalidatePath("/admin/escala");
   revalidatePath("/escala");
+}
+
+async function gravar(data: Date, funcaoId: string, nomeLimpo: string | null) {
+  if (!nomeLimpo) {
+    await prisma.atribuicao.deleteMany({ where: { data, funcaoId } });
+  } else {
+    await prisma.atribuicao.upsert({
+      where: { data_funcaoId: { data, funcaoId } },
+      update: { nomeEscalado: nomeLimpo, userId: null },
+      create: { data, funcaoId, nomeEscalado: nomeLimpo },
+    });
+  }
 }
 
 export type AtribuicaoMap = Record<string, Record<string, string | null>>; // data -> funcaoId -> nomeEscalado

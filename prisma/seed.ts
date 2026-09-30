@@ -9,31 +9,30 @@ const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD ?? "escalas2026admin";
 const TODOS_OS_DIAS = [0, 3, 6]; // domingo, quarta, sábado
 const SO_FIM_DE_SEMANA = [0, 6]; // domingo, sábado
 
-const CATEGORIAS = [
+type FuncaoSeed = { nome: string; diasSemana?: number[] };
+
+const CATEGORIAS: { nome: string; ordem: number; funcoes: FuncaoSeed[] }[] = [
+  { nome: "Direção", ordem: 1, funcoes: [{ nome: "Diretor(a)" }] },
   {
-    nome: "Direção",
-    ordem: 1,
-    funcoes: [
-      { nome: "Diretor(a)" },
-      { nome: "Palavra Pastoral" },
-      { nome: "Pregador" },
-    ],
-  },
-  {
-    nome: "Mídia",
+    nome: "Palavra e Pregação",
     ordem: 2,
+    funcoes: [{ nome: "Palavra Pastoral" }, { nome: "Pregador" }],
+  },
+  { nome: "Mídia", ordem: 3, funcoes: [{ nome: "Mídia" }] },
+  { nome: "Datashow", ordem: 4, funcoes: [{ nome: "Datashow", diasSemana: SO_FIM_DE_SEMANA }] },
+  {
+    nome: "Transmissão",
+    ordem: 5,
     funcoes: [
-      { nome: "Mídia" },
-      { nome: "Datashow", diasSemana: SO_FIM_DE_SEMANA },
-      { nome: "Operador de Transmissão" },
-      { nome: "Câmera Fixa" },
-      { nome: "Câmera Móvel 1" },
-      { nome: "Câmera Móvel 2" },
+      { nome: "Operador de Transmissão", diasSemana: SO_FIM_DE_SEMANA },
+      { nome: "Câmera Fixa", diasSemana: SO_FIM_DE_SEMANA },
+      { nome: "Câmera Móvel 1", diasSemana: SO_FIM_DE_SEMANA },
+      { nome: "Câmera Móvel 2", diasSemana: SO_FIM_DE_SEMANA },
     ],
   },
   {
     nome: "Som",
-    ordem: 3,
+    ordem: 6,
     funcoes: [{ nome: "Mesa de Som" }, { nome: "Som da Transmissão" }],
   },
 ];
