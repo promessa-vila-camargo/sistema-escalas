@@ -16,7 +16,7 @@ export type ActionState = { error?: string } | undefined;
 export async function criarCategoria(_state: ActionState, formData: FormData): Promise<ActionState> {
   await verifyAdmin();
   const nome = String(formData.get("nome") ?? "").trim();
-  if (!nome) return { error: "Escreva um nome para a categoria." };
+  if (!nome) return { error: "Escreva um nome para o ministério." };
 
   const max = await prisma.categoria.aggregate({ _max: { ordem: true } });
   await prisma.categoria.create({ data: { nome, ordem: (max._max.ordem ?? 0) + 1 } });

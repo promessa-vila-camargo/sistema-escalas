@@ -58,15 +58,17 @@ model UserFuncao {
 
 /**
  * Uma linha por (data do culto, função) — existe sempre que alguém preenche
- * aquela função naquele culto. userId nulo não deveria persistir (tirar
- * alguém apaga a linha), mas fica opcional para suportar "desmarcar" sem
- * apagar o registro caso vire útil manter histórico depois.
+ * aquela função naquele culto. O escalado é texto livre (nomeEscalado):
+ * não exige cadastro prévio da pessoa. userId fica preservado (não é mais
+ * lido pela UI) apenas para não descartar histórico de quem logou e se
+ * autoescalou antes dessa mudança; novas escritas não o usam mais.
  */
 model Atribuicao {
-  id       String   @id @default(cuid())
-  data     DateTime @db.Date
-  funcaoId String
-  userId   String?
+  id            String   @id @default(cuid())
+  data          DateTime @db.Date
+  funcaoId      String
+  userId        String?
+  nomeEscalado  String?
 
   funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)

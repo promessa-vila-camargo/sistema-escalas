@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { definirAtribuicao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
-export type PessoaDTO = { id: string; nome: string; ativo: boolean; funcaoIds: string[] };
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
+
+type DiaInfo = { data: string; dia: number; diaSemana: number };
+type PrintTarget = "mes" | DiaInfo;
 
 const COLUNAS: { key: "qua" | "sab" | "dom"; label: string; diaSemana: number }[] = [
   { key: "qua", label: "Quarta-feira", diaSemana: 3 },
@@ -16,11 +18,12 @@ const COLUNAS: { key: "qua" | "sab" | "dom"; label: string; diaSemana: number }[
   { key: "dom", label: "Domingo", diaSemana: 0 },
 ];
 
+const SAVE_DEBOUNCE_MS = 600;
+
 export default function EscalaBoard({
   ano,
   mes,
   categorias,
-  pessoas,
   atribuicoesIniciais,
   currentUser,
   showExport,
@@ -28,7 +31,6 @@ export default function EscalaBoard({
   ano: number;
   mes: number;
   categorias: CategoriaDTO[];
-  pessoas: PessoaDTO[];
   atribuicoesIniciais: AtribuicaoMap;
   currentUser: CurrentUser;
   showExport?: boolean;
@@ -36,52 +38,57 @@ export default function EscalaBoard({
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [, startTransition] = useTransition();
   const [mobileDay, setMobileDay] = useState<"qua" | "sab" | "dom">("qua");
-  const [confirmando, setConfirmando] = useState<{ data: string; dia: number; diaSemana: number; faltando: string[] }[] | null>(null);
+  const [confirmando, setConfirmando] = useState<{
+    alvo: PrintTarget;
+    pendentes: { data: string; dia: number; diaSemana: number; faltando: string[] }[];
+  } | null>(null);
+  const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
   const totalFuncoes = useMemo(() => categorias.reduce((n, c) => n + c.funcoes.length, 0), [categorias]);
   const isAdmin = currentUser.role === "ADMIN";
 
-  function pessoaById(id: string | null | undefined) {
-    return id ? pessoas.find((p) => p.id === id) ?? null : null;
-  }
-
-  function missingCount(data: string) {
-    let missing = 0;
+  function missingList(data: string) {
+    const out: string[] = [];
     for (const cat of categorias) {
       for (const f of cat.funcoes) {
-        if (!atribuicoes[data]?.[f.id]) missing++;
+        if (!atribuicoes[data]?.[f.id]?.trim()) out.push(f.nome);
       }
     }
-    return missing;
+    return out;
   }
 
-  function handleChange(data: string, funcaoId: string, userId: string | null) {
-    const prev = atribuicoes;
-    setAtribuicoes((old) => ({ ...old, [data]: { ...old[data], [funcaoId]: userId } }));
+  function commitSave(data: string, funcaoId: string, nome: string | null) {
     startTransition(async () => {
       try {
-        await definirAtribuicao(data, funcaoId, userId);
+        await definirAtribuicao(data, funcaoId, nome);
       } catch (e) {
-        setAtribuicoes(prev);
         alert(e instanceof Error ? e.message : "Não foi possível salvar.");
       }
     });
   }
 
-  function personOptionsFor(funcaoId: string, currentId: string | null) {
-    let candidatas = pessoas.filter((p) => p.ativo && p.funcaoIds.includes(funcaoId));
-    if (candidatas.length === 0) candidatas = pessoas.filter((p) => p.ativo);
-    if (currentId && !candidatas.some((p) => p.id === currentId)) {
-      const atual = pessoaById(currentId);
-      if (atual) candidatas = [...candidatas, atual];
+  function handleTextChange(data: string, funcaoId: string, value: string) {
+    setAtribuicoes((old) => ({ ...old, [data]: { ...old[data], [funcaoId]: value } }));
+    const key = `${data}:${funcaoId}`;
+    if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
+    saveTimers.current[key] = setTimeout(() => commitSave(data, funcaoId, value), SAVE_DEBOUNCE_MS);
+  }
+
+  function handleBlurCommit(data: string, funcaoId: string, value: string) {
+    const key = `${data}:${funcaoId}`;
+    if (saveTimers.current[key]) {
+      clearTimeout(saveTimers.current[key]);
+      delete saveTimers.current[key];
     }
-    return candidatas;
+    commitSave(data, funcaoId, value);
   }
 
   function renderCard(data: string, dia: number, diaSemana: number) {
-    const missing = missingCount(data);
-    const filled = totalFuncoes - missing;
+    const faltando = missingList(data);
+    const filled = totalFuncoes - faltando.length;
+    const completa = totalFuncoes > 0 && faltando.length === 0;
 
     return (
       <div key={data} className="card !p-3.5">
@@ -98,17 +105,27 @@ export default function EscalaBoard({
           {totalFuncoes > 0 && (
             <span
               className={
-                "ml-auto whitespace-nowrap text-[10.5px] font-bold tabular-nums " +
-                (missing === 0 ? "text-green-600" : "text-ink-400")
+                "ml-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums " +
+                (completa ? "bg-green-50 text-green-600" : "bg-ink-900/5 text-ink-400")
               }
             >
-              {filled}/{totalFuncoes}
+              {completa ? "Completa" : `${filled}/${totalFuncoes}`}
             </span>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              title="Gerar PDF desta escala"
+              onClick={() => handleExportClick({ data, dia, diaSemana })}
+              className="flex-none rounded-md p-1 text-ink-400 hover:bg-brand-50 hover:text-orange-600"
+            >
+              🖨
+            </button>
           )}
         </div>
 
         {categorias.length === 0 && (
-          <p className="text-[11.5px] text-ink-400">Cadastre categorias e funções em Pessoas.</p>
+          <p className="text-[11.5px] text-ink-400">Cadastre ministérios e funções em Pessoas.</p>
         )}
 
         {categorias.map((cat) => {
@@ -119,9 +136,12 @@ export default function EscalaBoard({
                 {cat.nome}
               </div>
               {cat.funcoes.map((f) => {
-                const currentId = atribuicoes[data]?.[f.id] ?? null;
-                const sou_eu = currentId === currentUser.id;
+                const valor = atribuicoes[data]?.[f.id] ?? "";
+                const preenchido = valor.trim().length > 0;
+                const meuNome = currentUser.nome.trim().toLowerCase();
+                const souEu = valor.trim().toLowerCase() === meuNome;
                 const habilitado = currentUser.funcaoIds.includes(f.id);
+                const editavel = isAdmin || (habilitado && (!preenchido || souEu));
 
                 return (
                   <div key={f.id} className="leader-row">
@@ -129,38 +149,26 @@ export default function EscalaBoard({
                       {f.nome}
                     </span>
                     <span className="leader-fill" />
-                    {isAdmin ? (
-                      <select
-                        className="max-w-[46%] flex-none rounded-md border-none bg-transparent px-1 py-0.5 text-[12px] font-semibold text-ink-900 hover:bg-brand-50 focus:bg-brand-50 focus:outline-none"
-                        value={currentId ?? ""}
-                        onChange={(e) => handleChange(data, f.id, e.target.value || null)}
-                      >
-                        <option value="">Selecionar…</option>
-                        {personOptionsFor(f.id, currentId).map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome}
-                            {!p.ativo ? " (inativo)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    ) : habilitado && (!currentId || sou_eu) ? (
-                      <button
-                        type="button"
-                        onClick={() => handleChange(data, f.id, sou_eu ? null : currentUser.id)}
-                        className={
-                          "flex-none whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10.5px] font-bold transition-colors " +
-                          (sou_eu
-                            ? "border-green-50 bg-green-50 text-green-600"
-                            : "border-brand-200 bg-white text-ink-600 hover:border-orange-500 hover:text-orange-600")
-                        }
-                      >
-                        {sou_eu ? "Você ✓" : "Marcar-me"}
-                      </button>
+                    {editavel ? (
+                      <input
+                        type="text"
+                        placeholder="Digite o nome..."
+                        value={valor}
+                        onChange={(e) => handleTextChange(data, f.id, e.target.value)}
+                        onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
+                        className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
+                      />
                     ) : (
                       <span className="flex-none truncate text-[11.5px] font-medium text-ink-400">
-                        {pessoaById(currentId)?.nome ?? "—"}
+                        {valor.trim() || "—"}
                       </span>
                     )}
+                    <span
+                      className={"flex-none text-[11px] " + (preenchido ? "text-green-600" : "text-orange-500")}
+                      title={preenchido ? "Preenchido" : "Sem responsável"}
+                    >
+                      {preenchido ? "✓" : "⚠"}
+                    </span>
                   </div>
                 );
               })}
@@ -172,30 +180,71 @@ export default function EscalaBoard({
   }
 
   const diasDoMes = useMemo(() => buildMonthDaysFlat(ano, mes), [ano, mes]);
-  const cultosCompletos = totalFuncoes > 0 ? diasDoMes.filter((d) => missingCount(d.data) === 0).length : 0;
+  const cultosCompletos = totalFuncoes > 0 ? diasDoMes.filter((d) => missingList(d.data).length === 0).length : 0;
 
-  function handleExportClick() {
-    if (totalFuncoes === 0 || diasDoMes.length === 0) {
-      window.print();
+  function handleExportClick(alvo: PrintTarget) {
+    if (totalFuncoes === 0) {
+      setPrintTarget(alvo);
+      setTimeout(() => window.print(), 30);
       return;
     }
-    const pendentes = diasDoMes
-      .map((d) => {
-        const faltando: string[] = [];
-        for (const cat of categorias) {
-          for (const f of cat.funcoes) {
-            if (!atribuicoes[d.data]?.[f.id]) faltando.push(f.nome);
-          }
-        }
-        return { ...d, faltando };
-      })
+    const diasParaChecar = alvo === "mes" ? diasDoMes : [alvo];
+    const pendentes = diasParaChecar
+      .map((d) => ({ ...d, faltando: missingList(d.data) }))
       .filter((d) => d.faltando.length > 0);
 
     if (pendentes.length > 0) {
-      setConfirmando(pendentes);
+      setConfirmando({ alvo, pendentes });
     } else {
-      window.print();
+      setPrintTarget(alvo);
+      setTimeout(() => window.print(), 30);
     }
+  }
+
+  function renderMinisterioBloco(item: DiaInfo, compact: boolean) {
+    return categorias.map((cat) => {
+      if (cat.funcoes.length === 0) return null;
+      return (
+        <div key={cat.id} className={compact ? "mb-0.5" : "mb-4"}>
+          <div
+            className={
+              compact
+                ? "mt-1 text-[8.5px] font-extrabold uppercase tracking-wide text-orange-600"
+                : "mb-2 border-b-2 border-orange-500 pb-1 font-heading text-[13px] font-extrabold uppercase tracking-wide text-brand-700"
+            }
+          >
+            {cat.nome}
+          </div>
+          {cat.funcoes.map((f) => {
+            const nome = (atribuicoes[item.data]?.[f.id] ?? "").trim();
+            if (compact) {
+              return (
+                <div key={f.id} className="leader-row !text-[10.5px]">
+                  <span className="leader-label !max-w-[52%]">{f.nome}</span>
+                  <span className="leader-fill" />
+                  <span
+                    className={
+                      "flex-none max-w-[46%] truncate text-[10.5px] font-bold " +
+                      (nome ? "text-ink-900" : "italic font-medium text-ink-400")
+                    }
+                  >
+                    {nome || "—"}
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <div key={f.id} className="mb-2.5 flex items-baseline justify-between gap-4 border-b border-dotted border-brand-200 pb-1.5">
+                <span className="text-[13px] font-semibold text-ink-600">{f.nome}</span>
+                <span className={"text-right text-[14px] font-bold " + (nome ? "text-ink-900" : "italic font-medium text-ink-400")}>
+                  {nome || "não preenchido"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    });
   }
 
   return (
@@ -210,8 +259,8 @@ export default function EscalaBoard({
               </>
             )}
           </span>
-          <button type="button" onClick={handleExportClick} className="btn-primary">
-            📄 Exportar PDF
+          <button type="button" onClick={() => handleExportClick("mes")} className="btn-primary">
+            📄 Exportar PDF do mês
           </button>
         </div>
       )}
@@ -226,11 +275,12 @@ export default function EscalaBoard({
               <h3 className="font-heading text-base font-extrabold text-ink-900">Escala incompleta</h3>
             </div>
             <p className="mb-4 text-[12.5px] leading-relaxed text-ink-600">
-              Existem funções sem responsável em {nomeMes(mes)}/{ano}. Você pode voltar e preencher, ou exportar
-              mesmo assim.
+              Existem funções sem responsável
+              {confirmando.alvo === "mes" ? ` em ${nomeMes(mes)}/${ano}` : ""}. Você pode voltar e preencher, ou
+              exportar mesmo assim.
             </p>
             <div className="mb-5 flex max-h-80 flex-col gap-2 overflow-auto">
-              {confirmando.map((c) => (
+              {confirmando.pendentes.map((c) => (
                 <div key={c.data} className="rounded-lg bg-brand-50 p-2.5">
                   <div className="mb-0.5 text-[12.5px] font-bold text-ink-900">
                     {nomeDiaSemana(c.diaSemana)} • {fmtDDMM(ano, mes, c.dia)}/{ano}
@@ -247,8 +297,10 @@ export default function EscalaBoard({
                 type="button"
                 className="btn-primary"
                 onClick={() => {
+                  const alvo = confirmando.alvo;
                   setConfirmando(null);
-                  window.print();
+                  setPrintTarget(alvo);
+                  setTimeout(() => window.print(), 30);
                 }}
               >
                 Continuar mesmo assim
@@ -291,13 +343,14 @@ export default function EscalaBoard({
         ))}
       </div>
 
-      {showExport && (
+      {/* ---- PDF do mês inteiro (compacto, 2 colunas) ---- */}
+      {printTarget === "mes" && (
         <div className="hidden print:block">
           <div className="mb-4 flex items-center gap-3 border-b-2 border-brand-700 pb-3">
             <img src="/logo-icon.png" alt="" className="h-9 w-9 rounded-full" />
             <div className="flex flex-col">
               <span className="font-heading text-base font-extrabold text-brand-700">
-                Escala de Cultos — Promessa Vila Camargo
+                Escala de Ministérios — Promessa Vila Camargo
               </span>
               <span className="text-[11px] font-semibold text-ink-600">
                 {nomeMes(mes)} de {ano}
@@ -310,35 +363,38 @@ export default function EscalaBoard({
                 <div className="mb-1 font-heading text-[11.5px] font-extrabold uppercase tracking-wide text-brand-700">
                   {nomeDiaSemana(d.diaSemana)} • {fmtDDMM(ano, mes, d.dia)}/{ano}
                 </div>
-                {categorias.map((cat) => {
-                  if (cat.funcoes.length === 0) return null;
-                  return (
-                    <div key={cat.id} className="mb-0.5">
-                      <div className="mt-1 text-[8.5px] font-extrabold uppercase tracking-wide text-orange-600">
-                        {cat.nome}
-                      </div>
-                      {cat.funcoes.map((f) => {
-                        const pessoa = pessoaById(atribuicoes[d.data]?.[f.id] ?? null);
-                        return (
-                          <div key={f.id} className="leader-row !text-[10.5px]">
-                            <span className="leader-label !max-w-[52%]">{f.nome}</span>
-                            <span className="leader-fill" />
-                            <span
-                              className={
-                                "flex-none max-w-[46%] truncate text-[10.5px] font-bold " +
-                                (pessoa ? "text-ink-900" : "italic font-medium text-ink-400")
-                              }
-                            >
-                              {pessoa ? pessoa.nome : "—"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                {renderMinisterioBloco(d, true)}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---- PDF de um único culto (documento oficial, espaçoso) ---- */}
+      {printTarget && printTarget !== "mes" && (
+        <div className="hidden print:block">
+          <div className="mb-6 flex items-center gap-4 border-b-4 border-brand-700 pb-4">
+            <img src="/logo-icon.png" alt="" className="h-16 w-16 rounded-full" />
+            <div className="flex flex-col">
+              <span className="font-heading text-[10px] font-bold uppercase tracking-[0.15em] text-orange-600">
+                Promessa Vila Camargo
+              </span>
+              <span className="font-heading text-2xl font-extrabold text-brand-700">Escala de Ministérios</span>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Data</div>
+              <div className="font-heading text-lg font-extrabold text-ink-900">
+                {fmtDDMM(ano, mes, printTarget.dia)}/{ano}
+              </div>
+              <div className="text-[12px] font-semibold text-ink-600">{nomeDiaSemana(printTarget.diaSemana)}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-10">{renderMinisterioBloco(printTarget, false)}</div>
+
+          <div className="mt-10 border-t border-brand-100 pt-3 text-center text-[10px] text-ink-400">
+            Escala de Ministérios · Promessa Vila Camargo · gerado em{" "}
+            {new Date().toLocaleDateString("pt-BR")}
           </div>
         </div>
       )}

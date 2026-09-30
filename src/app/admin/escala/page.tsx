@@ -24,22 +24,16 @@ export default async function AdminEscalaPage({
   const ano = params.ano ? Number(params.ano) : padrao.ano;
   const mes = params.mes ? Number(params.mes) : padrao.mes;
 
-  const [categoriasRaw, pessoasRaw] = await Promise.all([
-    prisma.categoria.findMany({ orderBy: { ordem: "asc" }, include: { funcoes: { orderBy: { ordem: "asc" } } } }),
-    prisma.user.findMany({ where: { role: "VOLUNTARIO" }, include: { funcoes: true }, orderBy: { nome: "asc" } }),
-  ]);
+  const categoriasRaw = await prisma.categoria.findMany({
+    orderBy: { ordem: "asc" },
+    include: { funcoes: { orderBy: { ordem: "asc" } } },
+  });
 
   const primeiroDia = isoDate(ano, mes, 1);
   const ultimoDia = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
   const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
-  const pessoas = pessoasRaw.map((p) => ({
-    id: p.id,
-    nome: p.nome,
-    ativo: p.ativo,
-    funcaoIds: p.funcoes.map((f) => f.funcaoId),
-  }));
 
   return (
     <div>
@@ -51,7 +45,6 @@ export default async function AdminEscalaPage({
         ano={ano}
         mes={mes}
         categorias={categorias}
-        pessoas={pessoas}
         atribuicoesIniciais={atribuicoes}
         currentUser={user}
         showExport

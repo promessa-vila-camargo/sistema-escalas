@@ -41,7 +41,7 @@ function NovaCategoriaForm() {
       }}
       className="flex gap-2"
     >
-      <input name="nome" placeholder="Nova categoria…" maxLength={40} className="input py-1.5 text-[12.5px]" />
+      <input name="nome" placeholder="Novo ministério…" maxLength={40} className="input py-1.5 text-[12.5px]" />
       <button type="submit" disabled={pending} className="btn-primary !px-3 !py-1.5 text-xs">
         +
       </button>
@@ -53,9 +53,9 @@ function NovaCategoriaForm() {
 export default function CategoriasManager({ categorias }: { categorias: CategoriaDTO[] }) {
   return (
     <div className="card">
-      <h2 className="mb-3 text-[13px] font-extrabold uppercase tracking-wide text-ink-600">Categorias e funções</h2>
+      <h2 className="mb-3 text-[13px] font-extrabold uppercase tracking-wide text-ink-600">Ministérios e funções</h2>
 
-      {categorias.length === 0 && <p className="mb-3 text-[12.5px] text-ink-400">Nenhuma categoria ainda.</p>}
+      {categorias.length === 0 && <p className="mb-3 text-[12.5px] text-ink-400">Nenhum ministério ainda.</p>}
 
       {categorias.map((cat, i) => (
         <div key={cat.id} className={"mb-4 pb-3.5 " + (i < categorias.length - 1 ? "border-b border-brand-100" : "")}>
@@ -65,7 +65,7 @@ export default function CategoriasManager({ categorias }: { categorias: Categori
               type="button"
               className="text-xs text-red-500 hover:text-red-600"
               onClick={() => {
-                if (confirm(`Remover a categoria "${cat.nome}" e todas as suas funções?`)) excluirCategoria(cat.id);
+                if (confirm(`Remover o ministério "${cat.nome}" e todas as suas funções?`)) excluirCategoria(cat.id);
               }}
             >
               Remover

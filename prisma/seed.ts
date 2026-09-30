@@ -8,24 +8,19 @@ const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD ?? "escalas2026admin";
 
 const CATEGORIAS = [
   {
-    nome: "Direção e Palavra",
+    nome: "Direção",
     ordem: 1,
     funcoes: ["Diretor(a)", "Palavra Pastoral", "Pregador"],
   },
   {
     nome: "Mídia",
     ordem: 2,
-    funcoes: ["Mídia", "Datashow"],
-  },
-  {
-    nome: "Transmissão",
-    ordem: 3,
-    funcoes: ["Operador de transmissão", "Câmera fixa", "Câmera móvel 1", "Câmera móvel 2"],
+    funcoes: ["Mídia", "Datashow", "Operador de Transmissão", "Câmera Fixa", "Câmera Móvel 1", "Câmera Móvel 2"],
   },
   {
     nome: "Som",
-    ordem: 4,
-    funcoes: ["Mesa de som", "Som transmissão"],
+    ordem: 3,
+    funcoes: ["Mesa de Som", "Som da Transmissão"],
   },
 ];
 

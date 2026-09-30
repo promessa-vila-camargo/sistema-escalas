@@ -62,7 +62,7 @@ function PessoaForm({
         </span>
         <div className="flex flex-col gap-3">
           {categorias.length === 0 && (
-            <p className="text-[12.5px] text-ink-400">Cadastre categorias e funções ao lado primeiro.</p>
+            <p className="text-[12.5px] text-ink-400">Cadastre ministérios e funções ao lado primeiro.</p>
           )}
           {categorias.map((cat) => {
             if (cat.funcoes.length === 0) return null;
