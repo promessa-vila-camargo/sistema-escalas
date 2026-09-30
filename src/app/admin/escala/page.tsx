@@ -1,6 +1,6 @@
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes } from "@/lib/actions/escala";
+import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
 import { isoDate } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
@@ -32,6 +32,7 @@ export default async function AdminEscalaPage({
   const primeiroDia = isoDate(ano, mes, 1);
   const ultimoDia = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
   const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
+  const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
 
@@ -46,6 +47,7 @@ export default async function AdminEscalaPage({
         mes={mes}
         categorias={categorias}
         atribuicoesIniciais={atribuicoes}
+        observacoesIniciais={observacoes}
         currentUser={user}
         showExport
       />

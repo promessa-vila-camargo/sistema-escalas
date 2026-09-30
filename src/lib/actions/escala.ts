@@ -63,3 +63,43 @@ export async function buscarAtribuicoes(dataInicio: string, dataFim: string): Pr
   }
   return out;
 }
+
+/**
+ * Observação livre por culto (ex.: "Sábado manhã" ou "também teremos culto
+ * à noite") — só o admin escreve; quem só vê a escala lê em modo leitura.
+ */
+export async function definirObservacao(data: string, texto: string | null) {
+  const me = await verifySession();
+  if (me.role !== "ADMIN") {
+    throw new Error("Só o administrador pode escrever observações.");
+  }
+
+  const dataObj = new Date(data);
+  const textoLimpo = texto?.trim() || null;
+
+  if (!textoLimpo) {
+    await prisma.cultoNota.deleteMany({ where: { data: dataObj } });
+  } else {
+    await prisma.cultoNota.upsert({
+      where: { data: dataObj },
+      update: { texto: textoLimpo },
+      create: { data: dataObj, texto: textoLimpo },
+    });
+  }
+
+  revalidatePath("/admin/escala");
+  revalidatePath("/escala");
+}
+
+export type ObservacaoMap = Record<string, string>; // data -> texto
+
+export async function buscarObservacoes(dataInicio: string, dataFim: string): Promise<ObservacaoMap> {
+  const rows = await prisma.cultoNota.findMany({
+    where: { data: { gte: new Date(dataInicio), lte: new Date(dataFim) } },
+  });
+  const out: ObservacaoMap = {};
+  for (const row of rows) {
+    out[row.data.toISOString().slice(0, 10)] = row.texto;
+  }
+  return out;
+}

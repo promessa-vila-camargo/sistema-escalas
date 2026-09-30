@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes } from "@/lib/actions/escala";
+import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
 import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM } from "@/lib/datas";
 import TopNav from "@/components/TopNav";
 
@@ -48,6 +48,7 @@ export default async function InicioPage() {
     mesP = parsed.m;
   }
   const atribuicoes = proxima ? await buscarAtribuicoes(proxima.data, proxima.data) : {};
+  const observacoes = proxima ? await buscarObservacoes(proxima.data, proxima.data) : {};
 
   const minhasFuncoesProxima = proxima ? minhasFuncoes.filter((f) => f.diasSemana.includes(proxima.diaSemana)) : [];
   const linkEscala = proxima ? `/escala?ano=${anoP}&mes=${mesP}` : "/escala";
@@ -71,6 +72,11 @@ export default async function InicioPage() {
               <div className="mb-3 badge-neutral inline-flex">
                 🗓️ {nomeDiaSemana(proxima.diaSemana)}, {fmtDDMM(anoP, mesP, proxima.dia)} de {nomeMes(mesP)}
               </div>
+              {(observacoes[proxima.data] ?? "").trim() && (
+                <p className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-[12.5px] text-orange-700">
+                  📝 {observacoes[proxima.data]}
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 {minhasFuncoesProxima.map((f) => {
                   const nome = (atribuicoes[proxima.data]?.[f.id] ?? "").trim();

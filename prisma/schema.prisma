@@ -84,3 +84,10 @@ model Atribuicao {
 
   @@unique([data, funcaoId])
 }
+
+/** Observação livre por culto (ex.: "também teremos culto à noite às 19h") — só o admin escreve, todo mundo que vê aquele dia lê. */
+model CultoNota {
+  id    String   @id @default(cuid())
+  data  DateTime @unique @db.Date
+  texto String
+}

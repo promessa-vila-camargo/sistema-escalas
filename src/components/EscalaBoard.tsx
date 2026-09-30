@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { definirAtribuicao } from "@/lib/actions/escala";
+import { definirAtribuicao, definirObservacao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
@@ -36,6 +36,7 @@ function emojiFuncao(nome: string) {
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
+export type ObservacaoMap = Record<string, string>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
 type PrintTarget = "mes" | DiaInfo;
@@ -48,6 +49,7 @@ export default function EscalaBoard({
   mes,
   categorias,
   atribuicoesIniciais,
+  observacoesIniciais,
   currentUser,
   showExport,
 }: {
@@ -55,10 +57,12 @@ export default function EscalaBoard({
   mes: number;
   categorias: CategoriaDTO[];
   atribuicoesIniciais: AtribuicaoMap;
+  observacoesIniciais?: ObservacaoMap;
   currentUser: CurrentUser;
   showExport?: boolean;
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
+  const [observacoes, setObservacoes] = useState<ObservacaoMap>(observacoesIniciais ?? {});
   const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState<{
     alvo: PrintTarget;
@@ -68,6 +72,7 @@ export default function EscalaBoard({
   const [toast, setToast] = useState<string | null>(null);
   const [salvandoTudo, setSalvandoTudo] = useState(false);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
@@ -185,6 +190,30 @@ export default function EscalaBoard({
     commitSave(data, funcaoId, maiuscula);
   }
 
+  function commitObservacao(data: string, texto: string) {
+    startTransition(async () => {
+      try {
+        await definirObservacao(data, texto || null);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Não foi possível salvar a observação.");
+      }
+    });
+  }
+
+  function handleObsChange(data: string, value: string) {
+    setObservacoes((old) => ({ ...old, [data]: value }));
+    if (obsTimers.current[data]) clearTimeout(obsTimers.current[data]);
+    obsTimers.current[data] = setTimeout(() => commitObservacao(data, value), SAVE_DEBOUNCE_MS);
+  }
+
+  function handleObsBlur(data: string, value: string) {
+    if (obsTimers.current[data]) {
+      clearTimeout(obsTimers.current[data]);
+      delete obsTimers.current[data];
+    }
+    commitObservacao(data, value);
+  }
+
   function renderCard(data: string, dia: number, diaSemana: number) {
     const categoriasCard = categoriasDoDia(diaSemana);
     const totalCard = categoriasCard.reduce((n, c) => n + c.funcoes.length, 0);
@@ -281,6 +310,23 @@ export default function EscalaBoard({
             </div>
           );
         })}
+
+        {(isAdmin || (observacoes[data] ?? "").trim()) && (
+          <div className="mt-2.5 border-t border-brand-100 pt-2">
+            {isAdmin ? (
+              <textarea
+                rows={2}
+                placeholder="📝 Observação (ex: também teremos culto à noite às 19h)..."
+                value={observacoes[data] ?? ""}
+                onChange={(e) => handleObsChange(data, e.target.value)}
+                onBlur={(e) => handleObsBlur(data, e.target.value)}
+                className="w-full resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[11.5px] leading-snug text-ink-600 outline-none placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
+              />
+            ) : (
+              <p className="px-1.5 text-[11.5px] leading-snug text-ink-600">📝 {observacoes[data]}</p>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -316,15 +362,21 @@ export default function EscalaBoard({
       clearTimeout(timer);
       delete saveTimers.current[key];
     }
+    const pendentesObs = Object.entries(obsTimers.current);
+    for (const [data, timer] of pendentesObs) {
+      clearTimeout(timer);
+      delete obsTimers.current[data];
+    }
     setSalvandoTudo(true);
     try {
-      await Promise.all(
-        pendentes.map(([key]) => {
+      await Promise.all([
+        ...pendentes.map(([key]) => {
           const [data, funcaoId] = key.split(":");
           const valor = (atribuicoes[data]?.[funcaoId] ?? "").trim().toUpperCase();
           return definirAtribuicao(data, funcaoId, valor || null);
-        })
-      );
+        }),
+        ...pendentesObs.map(([data]) => definirObservacao(data, observacoes[data] ?? "")),
+      ]);
       if (toastTimer.current) clearTimeout(toastTimer.current);
       setToast("Escala salva com sucesso! ✅");
       toastTimer.current = setTimeout(() => setToast(null), 3000);
@@ -333,6 +385,13 @@ export default function EscalaBoard({
     } finally {
       setSalvandoTudo(false);
     }
+  }
+
+  /** Nota de observação de um culto, pro PDF (só aparece quando tem texto). */
+  function renderObsNota(data: string) {
+    const texto = (observacoes[data] ?? "").trim();
+    if (!texto) return null;
+    return <p className="mt-1.5 text-[10px] italic leading-snug text-ink-600">📝 {texto}</p>;
   }
 
   function categoriasDoDiaCompleto(diaSemana: number) {
@@ -547,6 +606,7 @@ export default function EscalaBoard({
                   {nomeDiaSemana(d.diaSemana)} • {fmtDDMM(ano, mes, d.dia)}/{ano}
                 </div>
                 {renderMinisterioCompacto(d)}
+                {renderObsNota(d.data)}
               </div>
             ))}
           </div>
@@ -600,12 +660,14 @@ export default function EscalaBoard({
                       Sábado · {fmtDDMM(ano, mes, par.sab.dia)}
                     </div>
                     {renderColunaCulto(par.sab)}
+                    {renderObsNota(par.sab.data)}
                   </div>
                   <div>
                     <div className="mb-3 rounded-full bg-pdforange px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
                       Domingo · {fmtDDMM(ano, mes, par.dom.dia)}
                     </div>
                     {renderColunaCulto(par.dom)}
+                    {renderObsNota(par.dom.data)}
                   </div>
                 </div>
               );
@@ -616,6 +678,7 @@ export default function EscalaBoard({
                   4ª feira · {fmtDDMM(ano, mes, printTarget.dia)}
                 </div>
                 {renderColunaCulto(printTarget)}
+                {renderObsNota(printTarget.data)}
               </div>
             );
           })()}

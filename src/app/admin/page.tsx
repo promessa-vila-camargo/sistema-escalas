@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes } from "@/lib/actions/escala";
+import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
 import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM } from "@/lib/datas";
 
 export const metadata = { title: "Início | Admin" };
@@ -47,6 +47,7 @@ export default async function AdminHomePage() {
   const primeiroDiaMes = isoDate(anoP, mesP, 1);
   const ultimoDiaMes = isoDate(anoP, mesP, new Date(anoP, mesP + 1, 0).getDate());
   const atribuicoesMes = await buscarAtribuicoes(primeiroDiaMes, ultimoDiaMes);
+  const observacoesMes = await buscarObservacoes(primeiroDiaMes, ultimoDiaMes);
 
   const diasDoMes = buildMonthDaysFlat(anoP, mesP);
   let totalSlotsMes = 0;
@@ -84,10 +85,12 @@ export default async function AdminHomePage() {
       const nome = (atribuicoesMes[proxima.data]?.[f.funcaoId] ?? "").trim();
       return `${emojiMinisterio(f.catNome)} ${f.funcaoNome}: ${nome}`;
     });
+    const nota = (observacoesMes[proxima.data] ?? "").trim();
     const texto = [
       `📋 *Escala — ${nomeDiaSemana(proxima.diaSemana)}, ${fmtDDMM(anoP, mesP, proxima.dia)}*`,
       "",
       ...linhas,
+      ...(nota ? ["", `📝 ${nota}`] : []),
     ].join("\n");
     linkWhatsapp = `https://wa.me/?text=${encodeURIComponent(texto)}`;
   }
@@ -122,6 +125,12 @@ export default async function AdminHomePage() {
                 style={{ width: `${pctProxima}%` }}
               />
             </div>
+
+            {(observacoesMes[proxima.data] ?? "").trim() && (
+              <p className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-[12.5px] text-orange-700">
+                📝 {observacoesMes[proxima.data]}
+              </p>
+            )}
 
             {pendentesProxima.length > 0 ? (
               <div className="flex flex-col gap-1.5">
