@@ -5,18 +5,13 @@ import { definirAtribuicao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
-export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number };
+export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
 type PrintTarget = "mes" | DiaInfo;
-
-const COLUNAS: { key: "qua" | "sab" | "dom"; label: string; diaSemana: number }[] = [
-  { key: "qua", label: "Quarta-feira", diaSemana: 3 },
-  { key: "sab", label: "Sábado", diaSemana: 6 },
-  { key: "dom", label: "Domingo", diaSemana: 0 },
-];
+type GrupoKey = "fds" | "meio";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -37,7 +32,7 @@ export default function EscalaBoard({
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [, startTransition] = useTransition();
-  const [mobileDay, setMobileDay] = useState<"qua" | "sab" | "dom">("qua");
+  const [mobileGrupo, setMobileGrupo] = useState<GrupoKey>("fds");
   const [confirmando, setConfirmando] = useState<{
     alvo: PrintTarget;
     pendentes: { data: string; dia: number; diaSemana: number; faltando: string[] }[];
@@ -46,7 +41,15 @@ export default function EscalaBoard({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
+  const grupos = useMemo(() => {
+    const fds = [...dias.sab, ...dias.dom].sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+    return [
+      { key: "fds" as GrupoKey, label: "Fim de Semana", itens: fds },
+      { key: "meio" as GrupoKey, label: "Meio de Semana", itens: dias.qua },
+    ];
+  }, [dias]);
   const isAdmin = currentUser.role === "ADMIN";
+  const temAlgumaFuncao = categorias.some((c) => c.funcoes.length > 0);
 
   /**
    * Voluntário só vê os ministérios/funções que o admin atribuiu ao login
@@ -60,14 +63,16 @@ export default function EscalaBoard({
       .filter((c) => c.funcoes.length > 0);
   }, [categorias, isAdmin, currentUser.funcaoIds]);
 
-  const totalFuncoes = useMemo(
-    () => categoriasVisiveis.reduce((n, c) => n + c.funcoes.length, 0),
-    [categoriasVisiveis]
-  );
+  /** Dentro do que a pessoa pode ver, ainda filtra pelas funções que valem naquele dia da semana (ex.: Datashow não entra na quarta). */
+  function categoriasDoDia(diaSemana: number) {
+    return categoriasVisiveis
+      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana)) }))
+      .filter((c) => c.funcoes.length > 0);
+  }
 
-  function missingList(data: string) {
+  function missingList(data: string, diaSemana: number) {
     const out: string[] = [];
-    for (const cat of categoriasVisiveis) {
+    for (const cat of categoriasDoDia(diaSemana)) {
       for (const f of cat.funcoes) {
         if (!atribuicoes[data]?.[f.id]?.trim()) out.push(f.nome);
       }
@@ -102,9 +107,11 @@ export default function EscalaBoard({
   }
 
   function renderCard(data: string, dia: number, diaSemana: number) {
-    const faltando = missingList(data);
-    const filled = totalFuncoes - faltando.length;
-    const completa = totalFuncoes > 0 && faltando.length === 0;
+    const categoriasCard = categoriasDoDia(diaSemana);
+    const totalCard = categoriasCard.reduce((n, c) => n + c.funcoes.length, 0);
+    const faltando = missingList(data, diaSemana);
+    const filled = totalCard - faltando.length;
+    const completa = totalCard > 0 && faltando.length === 0;
 
     return (
       <div key={data} className="card !p-3.5">
@@ -118,14 +125,14 @@ export default function EscalaBoard({
               {fmtDDMM(ano, mes, dia)}/{ano}
             </span>
           </div>
-          {totalFuncoes > 0 && (
+          {totalCard > 0 && (
             <span
               className={
                 "ml-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums " +
                 (completa ? "bg-green-50 text-green-600" : "bg-ink-900/5 text-ink-400")
               }
             >
-              {completa ? "Completa" : `${filled}/${totalFuncoes}`}
+              {completa ? "Completa" : `${filled}/${totalCard}`}
             </span>
           )}
           {isAdmin && (
@@ -140,15 +147,17 @@ export default function EscalaBoard({
           )}
         </div>
 
-        {categoriasVisiveis.length === 0 && (
+        {categoriasCard.length === 0 && (
           <p className="text-[11.5px] text-ink-400">
-            {isAdmin
+            {!temAlgumaFuncao
               ? "Cadastre ministérios e funções em Pessoas."
-              : "Nenhuma função foi atribuída ao seu login ainda. Fale com o administrador."}
+              : isAdmin
+                ? "Nenhuma função vale para este dia."
+                : "Nenhuma função foi atribuída ao seu login ainda (ou nenhuma das suas vale neste dia)."}
           </p>
         )}
 
-        {categoriasVisiveis.map((cat) => {
+        {categoriasCard.map((cat) => {
           if (cat.funcoes.length === 0) return null;
           return (
             <div key={cat.id} className="mb-0.5">
@@ -190,17 +199,19 @@ export default function EscalaBoard({
   }
 
   const diasDoMes = useMemo(() => buildMonthDaysFlat(ano, mes), [ano, mes]);
-  const cultosCompletos = totalFuncoes > 0 ? diasDoMes.filter((d) => missingList(d.data).length === 0).length : 0;
+  const cultosCompletos = temAlgumaFuncao
+    ? diasDoMes.filter((d) => missingList(d.data, d.diaSemana).length === 0).length
+    : 0;
 
   function handleExportClick(alvo: PrintTarget) {
-    if (totalFuncoes === 0) {
+    if (!temAlgumaFuncao) {
       setPrintTarget(alvo);
       setTimeout(() => window.print(), 30);
       return;
     }
     const diasParaChecar = alvo === "mes" ? diasDoMes : [alvo];
     const pendentes = diasParaChecar
-      .map((d) => ({ ...d, faltando: missingList(d.data) }))
+      .map((d) => ({ ...d, faltando: missingList(d.data, d.diaSemana) }))
       .filter((d) => d.faltando.length > 0);
 
     if (pendentes.length > 0) {
@@ -212,7 +223,10 @@ export default function EscalaBoard({
   }
 
   function renderMinisterioBloco(item: DiaInfo, compact: boolean) {
-    return categorias.map((cat) => {
+    const categoriasDia = categorias
+      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(item.diaSemana)) }))
+      .filter((c) => c.funcoes.length > 0);
+    return categoriasDia.map((cat) => {
       if (cat.funcoes.length === 0) return null;
       return (
         <div key={cat.id} className={compact ? "mb-0.5" : "mb-4"}>
@@ -262,7 +276,7 @@ export default function EscalaBoard({
       {showExport && (
         <div className="no-print mb-4 flex flex-wrap items-center gap-3">
           <span className="mr-auto text-[12.5px] font-semibold text-ink-400">
-            {totalFuncoes > 0 && (
+            {temAlgumaFuncao && (
               <>
                 <b className="text-ink-600">{diasDoMes.length}</b> culto(s) neste mês ·{" "}
                 <b className="text-ink-600">{cultosCompletos}</b> completo(s)
@@ -321,33 +335,33 @@ export default function EscalaBoard({
       )}
 
       <div className="mb-4 flex gap-1.5 sm:hidden print:hidden">
-        {COLUNAS.map((c) => (
+        {grupos.map((g) => (
           <button
-            key={c.key}
-            onClick={() => setMobileDay(c.key)}
+            key={g.key}
+            onClick={() => setMobileGrupo(g.key)}
             className={
               "flex-1 rounded-lg border px-2 py-2 text-[13px] font-bold transition-colors " +
-              (mobileDay === c.key
+              (mobileGrupo === g.key
                 ? "border-orange-600 bg-orange-600 text-white"
                 : "border-brand-100 bg-white text-ink-600")
             }
           >
-            {c.label.replace("-feira", "")}
+            {g.label}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 print:hidden">
-        {COLUNAS.map((col) => (
-          <div key={col.key} className={"flex flex-col gap-3.5 " + (mobileDay === col.key ? "" : "hidden sm:flex")}>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 print:hidden">
+        {grupos.map((g) => (
+          <div key={g.key} className={"flex flex-col gap-3.5 " + (mobileGrupo === g.key ? "" : "hidden sm:flex")}>
             <div className="flex items-baseline justify-between px-0.5">
-              <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">{col.label}</span>
-              <span className="text-xs font-semibold tabular-nums text-ink-400">{dias[col.key].length}</span>
+              <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">{g.label}</span>
+              <span className="text-xs font-semibold tabular-nums text-ink-400">{g.itens.length}</span>
             </div>
-            {dias[col.key].length === 0 ? (
+            {g.itens.length === 0 ? (
               <div className="empty-state">Nenhum culto neste mês.</div>
             ) : (
-              dias[col.key].map((d) => renderCard(d.data, d.dia, d.diaSemana))
+              g.itens.map((d) => renderCard(d.data, d.dia, d.diaSemana))
             )}
           </div>
         ))}

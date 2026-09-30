@@ -6,21 +6,35 @@ const prisma = new PrismaClient();
 const ADMIN_USERNAME = process.env.ADMIN_SEED_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD ?? "escalas2026admin";
 
+const TODOS_OS_DIAS = [0, 3, 6]; // domingo, quarta, sábado
+const SO_FIM_DE_SEMANA = [0, 6]; // domingo, sábado
+
 const CATEGORIAS = [
   {
     nome: "Direção",
     ordem: 1,
-    funcoes: ["Diretor(a)", "Palavra Pastoral", "Pregador"],
+    funcoes: [
+      { nome: "Diretor(a)" },
+      { nome: "Palavra Pastoral" },
+      { nome: "Pregador" },
+    ],
   },
   {
     nome: "Mídia",
     ordem: 2,
-    funcoes: ["Mídia", "Datashow", "Operador de Transmissão", "Câmera Fixa", "Câmera Móvel 1", "Câmera Móvel 2"],
+    funcoes: [
+      { nome: "Mídia" },
+      { nome: "Datashow", diasSemana: SO_FIM_DE_SEMANA },
+      { nome: "Operador de Transmissão" },
+      { nome: "Câmera Fixa" },
+      { nome: "Câmera Móvel 1" },
+      { nome: "Câmera Móvel 2" },
+    ],
   },
   {
     nome: "Som",
     ordem: 3,
-    funcoes: ["Mesa de Som", "Som da Transmissão"],
+    funcoes: [{ nome: "Mesa de Som" }, { nome: "Som da Transmissão" }],
   },
 ];
 
@@ -45,7 +59,7 @@ async function main() {
           nome: cat.nome,
           ordem: cat.ordem,
           funcoes: {
-            create: cat.funcoes.map((nome, i) => ({ nome, ordem: i + 1 })),
+            create: cat.funcoes.map((f, i) => ({ nome: f.nome, ordem: i + 1, diasSemana: f.diasSemana ?? TODOS_OS_DIAS })),
           },
         },
       });

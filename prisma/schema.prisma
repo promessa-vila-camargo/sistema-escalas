@@ -33,11 +33,17 @@ model Categoria {
   funcoes Funcao[]
 }
 
+/**
+ * diasSemana: em quais dias de culto essa função é necessária — 0=domingo,
+ * 3=quarta, 6=sábado (mesma convenção do Date#getDay() do JS). Default é
+ * todos os três; uma função só de fim de semana (ex.: Datashow) tem [0,6].
+ */
 model Funcao {
   id          String @id @default(cuid())
   nome        String
   ordem       Int    @default(0)
   categoriaId String
+  diasSemana  Int[]  @default([0, 3, 6])
 
   categoria   Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   usuarios    UserFuncao[]

@@ -36,8 +36,11 @@ export async function criarFuncao(_state: ActionState, formData: FormData): Prom
   const categoriaId = String(formData.get("categoriaId") ?? "");
   if (!nome || !categoriaId) return { error: "Escreva um nome para a função." };
 
+  const dias = formData.getAll("dias").map(Number).filter((n) => !Number.isNaN(n));
+  const diasSemana = dias.length > 0 ? dias : [0, 3, 6];
+
   const max = await prisma.funcao.aggregate({ _max: { ordem: true }, where: { categoriaId } });
-  await prisma.funcao.create({ data: { nome, categoriaId, ordem: (max._max.ordem ?? 0) + 1 } });
+  await prisma.funcao.create({ data: { nome, categoriaId, diasSemana, ordem: (max._max.ordem ?? 0) + 1 } });
   refreshPessoasPages();
   return undefined;
 }
@@ -45,6 +48,18 @@ export async function criarFuncao(_state: ActionState, formData: FormData): Prom
 export async function excluirFuncao(funcaoId: string) {
   await verifyAdmin();
   await prisma.funcao.delete({ where: { id: funcaoId } });
+  refreshPessoasPages();
+}
+
+/** Alterna se uma função vale para um dia da semana (0=domingo, 3=quarta, 6=sábado). */
+export async function alternarDiaFuncao(funcaoId: string, dia: number, ativo: boolean) {
+  await verifyAdmin();
+  const funcao = await prisma.funcao.findUnique({ where: { id: funcaoId } });
+  if (!funcao) return;
+  const atual = new Set(funcao.diasSemana);
+  if (ativo) atual.add(dia);
+  else atual.delete(dia);
+  await prisma.funcao.update({ where: { id: funcaoId }, data: { diasSemana: Array.from(atual).sort() } });
   refreshPessoasPages();
 }
 
