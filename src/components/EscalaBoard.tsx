@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { definirAtribuicao, definirObservacao } from "@/lib/actions/escala";
-import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
+import { definirAtribuicao, definirObservacao, definirEventoNoite, type Turno } from "@/lib/actions/escala";
+import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes, chaveNoite } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
 const EMOJI_MINISTERIO: Record<string, string> = {
@@ -37,6 +37,7 @@ export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: 
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
 export type ObservacaoMap = Record<string, string>;
+export type EventoNoiteMap = Record<string, boolean>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
 type PrintTarget = "mes" | DiaInfo;
@@ -50,6 +51,7 @@ export default function EscalaBoard({
   categorias,
   atribuicoesIniciais,
   observacoesIniciais,
+  eventosNoiteIniciais,
   currentUser,
   showExport,
 }: {
@@ -58,11 +60,14 @@ export default function EscalaBoard({
   categorias: CategoriaDTO[];
   atribuicoesIniciais: AtribuicaoMap;
   observacoesIniciais?: ObservacaoMap;
+  eventosNoiteIniciais?: EventoNoiteMap;
   currentUser: CurrentUser;
   showExport?: boolean;
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [observacoes, setObservacoes] = useState<ObservacaoMap>(observacoesIniciais ?? {});
+  const [eventosNoite, setEventosNoite] = useState<EventoNoiteMap>(eventosNoiteIniciais ?? {});
+  const [ativandoNoite, setAtivandoNoite] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState<{
     alvo: PrintTarget;
@@ -146,24 +151,33 @@ export default function EscalaBoard({
     return d.toISOString().slice(0, 10);
   }
 
-  /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). */
-  function applyLocalChange(data: string, funcaoId: string, value: string) {
+  /** Desfaz a chave "data|noite" sem nunca passar por Date() — o turno noite não tem propagação de dia da semana. */
+  function parseChave(chave: string): { data: string; turno: Turno } {
+    return chave.endsWith("|noite") ? { data: chave.slice(0, -"|noite".length), turno: "NOITE" } : { data: chave, turno: "DIA" };
+  }
+
+  /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). Só vale pro turno DIA. */
+  function applyLocalChange(chave: string, funcaoId: string, value: string) {
     setAtribuicoes((old) => {
-      const next = { ...old, [data]: { ...old[data], [funcaoId]: value } };
-      const diaSemana = new Date(data).getUTCDay();
-      const funcao = funcaoById(funcaoId);
-      if (diaSemana === 6 && funcao?.diasSemana.includes(0)) {
-        const dom = domingoSeguinte(data);
-        next[dom] = { ...next[dom], [funcaoId]: value };
+      const next = { ...old, [chave]: { ...old[chave], [funcaoId]: value } };
+      const { data, turno } = parseChave(chave);
+      if (turno === "DIA") {
+        const diaSemana = new Date(data).getUTCDay();
+        const funcao = funcaoById(funcaoId);
+        if (diaSemana === 6 && funcao?.diasSemana.includes(0)) {
+          const dom = domingoSeguinte(data);
+          next[dom] = { ...next[dom], [funcaoId]: value };
+        }
       }
       return next;
     });
   }
 
-  function commitSave(data: string, funcaoId: string, nome: string | null) {
+  function commitSave(chave: string, funcaoId: string, nome: string | null) {
+    const { data, turno } = parseChave(chave);
     startTransition(async () => {
       try {
-        await definirAtribuicao(data, funcaoId, nome);
+        await definirAtribuicao(data, funcaoId, nome, turno);
       } catch (e) {
         alert(e instanceof Error ? e.message : "Não foi possível salvar.");
       }
@@ -212,6 +226,34 @@ export default function EscalaBoard({
       delete obsTimers.current[data];
     }
     commitObservacao(data, value);
+  }
+
+  /**
+   * Liga/desliga "Evento noite" pra um culto. Ao ligar, se a noite ainda não
+   * tem nada preenchido localmente, copia os nomes da manhã como ponto de
+   * partida (o servidor faz a mesma cópia, de verdade, no banco). Desligar
+   * só esconde o bloco — os dados da noite continuam salvos.
+   */
+  async function handleToggleEventoNoite(data: string, ativo: boolean) {
+    setEventosNoite((old) => ({ ...old, [data]: ativo }));
+
+    if (ativo) {
+      const noite = chaveNoite(data);
+      const jaTemAlgo = Object.values(atribuicoes[noite] ?? {}).some((v) => (v ?? "").trim());
+      if (!jaTemAlgo) {
+        setAtribuicoes((old) => ({ ...old, [noite]: { ...old[data] } }));
+      }
+    }
+
+    setAtivandoNoite(data);
+    try {
+      await definirEventoNoite(data, ativo);
+    } catch (e) {
+      setEventosNoite((old) => ({ ...old, [data]: !ativo }));
+      alert(e instanceof Error ? e.message : "Não foi possível alterar o evento da noite.");
+    } finally {
+      setAtivandoNoite(null);
+    }
   }
 
   function renderCard(data: string, dia: number, diaSemana: number) {
@@ -311,6 +353,65 @@ export default function EscalaBoard({
           );
         })}
 
+        {isAdmin && (
+          <div className="mt-2.5 flex items-center gap-2 border-t border-brand-100 pt-2">
+            <span className="text-[13px]">🌙</span>
+            <select
+              value={eventosNoite[data] ? "noite" : "manha"}
+              onChange={(e) => handleToggleEventoNoite(data, e.target.value === "noite")}
+              disabled={ativandoNoite === data}
+              className="rounded-md border border-brand-200 bg-white px-2 py-1 text-[11px] font-semibold text-ink-900 outline-none focus:border-orange-500"
+            >
+              <option value="manha">APENAS MANHÃ</option>
+              <option value="noite">EVENTO NOITE</option>
+            </select>
+          </div>
+        )}
+
+        {eventosNoite[data] && (
+          <div className={"mt-2 rounded-lg bg-brand-50/60 p-2" + (isAdmin ? "" : " border-t border-brand-100 pt-2")}>
+            <div className="mb-1 text-[9.5px] font-extrabold uppercase tracking-wide text-ink-400">🌙 Evento noite</div>
+            {categoriasCard.map((cat) =>
+              cat.funcoes.map((f) => {
+                const chave = chaveNoite(data);
+                const valor = atribuicoes[chave]?.[f.id] ?? "";
+                const preenchido = valor.trim().length > 0;
+                const souEu = isAdmin ? false : currentUser.funcaoIds.includes(f.id);
+                const editavel = isAdmin || souEu;
+
+                return (
+                  <div key={f.id} className="leader-row">
+                    <span className="leader-label" title={f.nome}>
+                      {emojiFuncao(f.nome)} {f.nome}
+                    </span>
+                    <span className="leader-fill" />
+                    {editavel ? (
+                      <input
+                        type="text"
+                        placeholder="Digite o nome..."
+                        value={valor}
+                        onChange={(e) => handleTextChange(chave, f.id, e.target.value)}
+                        onBlur={(e) => handleBlurCommit(chave, f.id, e.target.value)}
+                        className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold uppercase text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:normal-case placeholder:text-ink-400 hover:border-brand-200 hover:bg-white focus:border-orange-500 focus:bg-white"
+                      />
+                    ) : (
+                      <span className="max-w-[48%] flex-none truncate text-right text-[12px] font-semibold uppercase text-ink-400">
+                        {valor.trim() || "—"}
+                      </span>
+                    )}
+                    <span
+                      className={"flex-none text-[13px] " + (preenchido ? "" : "opacity-70")}
+                      title={preenchido ? "Preenchido" : "Sem responsável"}
+                    >
+                      {preenchido ? "✅" : "⚠️"}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {(isAdmin || (observacoes[data] ?? "").trim()) && (
           <div className="mt-2.5 border-t border-brand-100 pt-2">
             {isAdmin ? (
@@ -371,9 +472,10 @@ export default function EscalaBoard({
     try {
       await Promise.all([
         ...pendentes.map(([key]) => {
-          const [data, funcaoId] = key.split(":");
-          const valor = (atribuicoes[data]?.[funcaoId] ?? "").trim().toUpperCase();
-          return definirAtribuicao(data, funcaoId, valor || null);
+          const [chave, funcaoId] = key.split(":");
+          const { data, turno } = parseChave(chave);
+          const valor = (atribuicoes[chave]?.[funcaoId] ?? "").trim().toUpperCase();
+          return definirAtribuicao(data, funcaoId, valor || null, turno);
         }),
         ...pendentesObs.map(([data]) => definirObservacao(data, observacoes[data] ?? "")),
       ]);
@@ -459,6 +561,41 @@ export default function EscalaBoard({
         </div>
       </div>
     ));
+  }
+
+  /** Bloco do evento da noite, pro PDF espaçoso (só aparece quando ativado pro dia). */
+  function renderColunaNoite(item: DiaInfo) {
+    if (!eventosNoite[item.data]) return null;
+    const categoriasDia = categoriasDoDiaCompleto(item.diaSemana);
+    const chave = chaveNoite(item.data);
+    return (
+      <div className="mb-3 break-inside-avoid rounded-xl bg-pdfgray p-3.5">
+        <div className="mb-2 flex items-center gap-2 text-pdfblue">
+          <span className="text-[17px] leading-none">🌙</span>
+          <span className="font-heading text-[12.5px] font-extrabold uppercase tracking-wide">Evento noite</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {categoriasDia.flatMap((cat) =>
+            cat.funcoes.map((f, i) => {
+              const nome = (atribuicoes[chave]?.[f.id] ?? "").trim();
+              return (
+                <div
+                  key={f.id}
+                  className={"flex items-baseline justify-between gap-3 pb-1.5 " + (i < cat.funcoes.length - 1 ? "border-b border-white" : "")}
+                >
+                  <span className="text-[11px] font-semibold text-ink-600">
+                    {emojiFuncao(f.nome)} {f.nome}
+                  </span>
+                  <span className={"text-right text-[12.5px] font-extrabold uppercase " + (nome ? "text-pdfblue" : "italic font-medium normal-case text-ink-400")}>
+                    {nome || "não preenchido"}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
   }
 
   /** Encontra o outro dia do mesmo fim de semana (sábado <-> domingo seguinte), se existir no mês. */
@@ -604,6 +741,7 @@ export default function EscalaBoard({
               <div key={d.data} className="mb-3 break-inside-avoid border-b border-pdfgray pb-2.5">
                 <div className="mb-1 font-heading text-[11.5px] font-extrabold uppercase tracking-wide text-pdfblue">
                   {nomeDiaSemana(d.diaSemana)} • {fmtDDMM(ano, mes, d.dia)}/{ano}
+                  {eventosNoite[d.data] && <span className="ml-1 font-normal normal-case text-ink-600">· 🌙 tem evento à noite</span>}
                 </div>
                 {renderMinisterioCompacto(d)}
                 {renderObsNota(d.data)}
@@ -660,6 +798,7 @@ export default function EscalaBoard({
                       Sábado · {fmtDDMM(ano, mes, par.sab.dia)}
                     </div>
                     {renderColunaCulto(par.sab)}
+                    {renderColunaNoite(par.sab)}
                     {renderObsNota(par.sab.data)}
                   </div>
                   <div>
@@ -667,6 +806,7 @@ export default function EscalaBoard({
                       Domingo · {fmtDDMM(ano, mes, par.dom.dia)}
                     </div>
                     {renderColunaCulto(par.dom)}
+                    {renderColunaNoite(par.dom)}
                     {renderObsNota(par.dom.data)}
                   </div>
                 </div>
@@ -678,6 +818,7 @@ export default function EscalaBoard({
                   4ª feira · {fmtDDMM(ano, mes, printTarget.dia)}
                 </div>
                 {renderColunaCulto(printTarget)}
+                {renderColunaNoite(printTarget)}
                 {renderObsNota(printTarget.data)}
               </div>
             );

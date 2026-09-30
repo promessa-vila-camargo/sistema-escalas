@@ -72,22 +72,29 @@ model UserFuncao {
  * lido pela UI) apenas para não descartar histórico de quem logou e se
  * autoescalou antes dessa mudança; novas escritas não o usam mais.
  */
+/** turno: "DIA" (culto normal) ou "NOITE" (evento extra à noite, mesmo dia). */
 model Atribuicao {
   id            String   @id @default(cuid())
   data          DateTime @db.Date
   funcaoId      String
   userId        String?
   nomeEscalado  String?
+  turno         String   @default("DIA")
 
   funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@unique([data, funcaoId])
+  @@unique([data, funcaoId, turno])
 }
 
-/** Observação livre por culto (ex.: "também teremos culto à noite às 19h") — só o admin escreve, todo mundo que vê aquele dia lê. */
+/**
+ * Observação livre por culto (ex.: "também teremos culto à noite às 19h") e
+ * a flag "tem evento à noite" — só o admin escreve, todo mundo que vê aquele
+ * dia lê.
+ */
 model CultoNota {
-  id    String   @id @default(cuid())
-  data  DateTime @unique @db.Date
-  texto String
+  id             String   @id @default(cuid())
+  data           DateTime @unique @db.Date
+  texto          String?
+  temEventoNoite Boolean  @default(false)
 }

@@ -22,6 +22,11 @@ export function parseIsoDate(iso: string) {
   return { y, m: m - 1, d };
 }
 
+/** Chave do evento noturno no AtribuicaoMap: mesma data, sufixo "|noite" — nunca é passada pra Date(). */
+export function chaveNoite(data: string) {
+  return `${data}|noite`;
+}
+
 export function fmtDDMM(y: number, m: number, d: number) {
   return `${pad2(d)}/${pad2(m + 1)}`;
 }

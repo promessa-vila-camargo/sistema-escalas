@@ -1,6 +1,6 @@
 import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
+import { buscarAtribuicoes, buscarObservacoes, buscarEventosNoite } from "@/lib/actions/escala";
 import { isoDate } from "@/lib/datas";
 import TopNav from "@/components/TopNav";
 import MonthYearPicker from "@/components/MonthYearPicker";
@@ -34,6 +34,7 @@ export default async function EscalaVoluntarioPage({
   const ultimoDia = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
   const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
   const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
+  const eventosNoite = await buscarEventosNoite(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
 
@@ -54,6 +55,7 @@ export default async function EscalaVoluntarioPage({
           categorias={categorias}
           atribuicoesIniciais={atribuicoes}
           observacoesIniciais={observacoes}
+          eventosNoiteIniciais={eventosNoite}
           currentUser={user}
         />
       </main>
