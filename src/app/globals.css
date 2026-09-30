@@ -7,24 +7,26 @@
 
 @theme {
   /*
-   * Paleta da Promessa Vila Camargo: base neutra fria (a ponta clara da
-   * escala) derivada do azul-marinho da logo, e laranja da chama como único
-   * acento de ação (botões, links, estados ativos) — nunca cor de fundo.
+   * Paleta oficial da Promessa Vila Camargo — azul institucional #004B83 e
+   * laranja #E18800, os mesmos hex exatos pedidos pro PDF, agora aplicados
+   * em todo o sistema (não só no documento exportado). brand-700 e
+   * orange-600 SÃO essas duas cores; o resto da escala é só tint/shade
+   * delas pra dar hierarquia (fundo claro, hover, texto).
    */
-  --color-brand-50: #eef3f8;
-  --color-brand-100: #dde7f1;
-  --color-brand-200: #bcd0e3;
-  --color-brand-300: #8fb0cc;
-  --color-brand-500: #2d6398;
-  --color-brand-600: #1b4e7f;
-  --color-brand-700: #123b5e;
-  --color-brand-900: #0a2740;
+  --color-brand-50: #e8f0f7;
+  --color-brand-100: #d1e2ef;
+  --color-brand-200: #a3c5df;
+  --color-brand-300: #6699bf;
+  --color-brand-500: #045688;
+  --color-brand-600: #004b83;
+  --color-brand-700: #004b83;
+  --color-brand-900: #00304f;
 
-  --color-orange-50: #fdf1e1;
-  --color-orange-100: #fbe0c0;
-  --color-orange-500: #e8920f;
-  --color-orange-600: #c97a0a;
-  --color-orange-700: #ad6708;
+  --color-orange-50: #fdf0dc;
+  --color-orange-100: #fbe2ba;
+  --color-orange-500: #e18800;
+  --color-orange-600: #e18800;
+  --color-orange-700: #b96f00;
 
   --color-ink-900: #1f2937;
   --color-ink-600: #6b7280;

@@ -5,6 +5,7 @@ import { definirAtribuicao } from "@/lib/actions/escala";
 import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes } from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 import MinisterioIcon from "./MinisterioIcon";
+import { IconAlert, IconCheck, IconPdf, IconPrinter } from "./icons";
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
@@ -172,7 +173,7 @@ export default function EscalaBoard({
               onClick={() => handleExportClick({ data, dia, diaSemana })}
               className="flex-none rounded-md p-1 text-ink-400 hover:bg-brand-50 hover:text-orange-600"
             >
-              🖨
+              <IconPrinter />
             </button>
           )}
         </div>
@@ -213,10 +214,10 @@ export default function EscalaBoard({
                       className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
                     />
                     <span
-                      className={"flex-none text-[11px] " + (preenchido ? "text-green-600" : "text-orange-500")}
+                      className={"flex-none " + (preenchido ? "text-green-600" : "text-orange-500")}
                       title={preenchido ? "Preenchido" : "Sem responsável"}
                     >
-                      {preenchido ? "✓" : "⚠"}
+                      {preenchido ? <IconCheck /> : <IconAlert />}
                     </span>
                   </div>
                 );
@@ -340,7 +341,7 @@ export default function EscalaBoard({
             )}
           </span>
           <button type="button" onClick={() => handleExportClick("mes")} className="btn-primary">
-            📄 Exportar PDF do mês
+            <IconPdf /> Exportar PDF do mês
           </button>
         </div>
       )}
@@ -350,7 +351,7 @@ export default function EscalaBoard({
           <div className="max-h-[82vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-6 shadow-soft-lift">
             <div className="mb-2 flex items-center gap-2.5">
               <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-red-50 text-red-500">
-                ⚠
+                <IconAlert size={17} />
               </span>
               <h3 className="font-heading text-base font-extrabold text-ink-900">Escala incompleta</h3>
             </div>

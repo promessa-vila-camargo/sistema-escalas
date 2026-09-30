@@ -5,6 +5,7 @@ import { salvarPessoa, excluirPessoa } from "@/lib/actions/pessoas";
 import { FormError } from "@/components/ui/FormMessage";
 import PasswordField from "@/components/ui/PasswordField";
 import type { CategoriaDTO } from "@/components/EscalaBoard";
+import { IconKey } from "@/components/icons";
 
 type Pessoa = {
   id: string;
@@ -168,7 +169,11 @@ export default function PessoasManager({ categorias, pessoas }: { categorias: Ca
         {listaFiltrada.map((p) => (
           <div key={p.id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-brand-100 bg-brand-50/60 px-3 py-2.5">
             <span className="min-w-[110px] text-[13.5px] font-bold text-ink-900">{p.nome}</span>
-            {p.username && <span className="text-[10.5px] font-semibold text-ink-400">🔑 {p.username}</span>}
+            {p.username && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-400">
+                <IconKey /> {p.username}
+              </span>
+            )}
             <div className="flex flex-1 flex-wrap gap-1.5">
               {funcaoNomes(p.funcaoIds).map((n) => (
                 <span key={n} className="badge-neutral">
