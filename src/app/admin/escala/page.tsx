@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
 import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
 import { buscarAtividades } from "@/lib/actions/atividade";
-import { isoDate, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
+import { isoDate, addDays, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
 import EventosExtra from "@/components/EventosExtra";
@@ -34,11 +34,16 @@ export default async function AdminEscalaPage({
 
   const primeiroDia = isoDate(ano, mes, 1);
   const ultimoDia = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
-  const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
-  const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
-  const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(primeiroDia, ultimoDia);
+  // Busca 1 dia a mais de cada lado — o fim de semana que atravessa a virada do
+  // mês (ex.: sábado 31/10 + domingo 01/11) precisa dos dados do dia vizinho
+  // pra não aparecer partido na exportação em PDF.
+  const buscaDe = addDays(primeiroDia, -1);
+  const buscaAte = addDays(ultimoDia, 1);
+  const atribuicoes = await buscarAtribuicoes(buscaDe, buscaAte);
+  const observacoes = await buscarObservacoes(buscaDe, buscaAte);
+  const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(buscaDe, buscaAte);
   const eventosExtra = await buscarEventosExtra();
-  const atividades = await buscarAtividades(primeiroDia, ultimoDia);
+  const atividades = await buscarAtividades(buscaDe, buscaAte);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));

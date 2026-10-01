@@ -41,9 +41,8 @@
   --color-pdfblue: #004b83;
   --color-pdforange: #e18800;
   --color-pdfgray: #f2f4f7;
-  /* Faixas pastel que alternam por semana na tabela de programação (azul, laranja, roxo, verde — ciclo de 4). */
-  --color-pdfband-purple: #ede4f7;
-  --color-pdfband-purple-line: #c9b3e6;
+  /* Quadro escuro de informações do card de cada dia, na exportação visual da escala. */
+  --color-pdfdark: #1b2027;
 
   --color-red-50: #fbeae7;
   --color-red-500: #b5473a;
@@ -160,7 +159,7 @@ h3 {
   }
 
   @page {
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 10mm;
   }
 }

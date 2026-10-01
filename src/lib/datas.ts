@@ -22,6 +22,13 @@ export function parseIsoDate(iso: string) {
   return { y, m: m - 1, d };
 }
 
+/** Soma (ou subtrai) dias a uma data "YYYY-MM-DD", sempre em fuso local — usada pra buscar 1 dia além da virada do mês (pro fim de semana que atravessa dois meses não ficar partido na exportação). */
+export function addDays(iso: string, delta: number) {
+  const { y, m, d } = parseIsoDate(iso);
+  const dt = new Date(y, m, d + delta);
+  return isoDate(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
 /**
  * Funções em que sábado e domingo são pessoas diferentes por natureza —
  * escalar no sábado NÃO repete automaticamente no domingo (diferente das
@@ -65,6 +72,11 @@ export function buildMonthDaysFlat(year: number, month: number): CultoDia[] {
 
 export function nomeMes(month: number) {
   return MESES[month];
+}
+
+/** Abreviação de 3 letras do mês em caixa alta ("Outubro" -> "OUT") — usada na faixa colorida do card de exportação. */
+export function nomeMesAbrev(month: number) {
+  return MESES[month].slice(0, 3).toUpperCase();
 }
 
 export function nomeDiaSemana(diaSemana: number) {
