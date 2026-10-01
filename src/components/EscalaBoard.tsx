@@ -448,7 +448,7 @@ export default function EscalaBoard({
   function handleConfirmarSelecaoExport() {
     const temAlgumaSelecionada = todasFuncaoIdsExport.some((id) => isSelecionadaExport(id));
     if (!temAlgumaSelecionada) {
-      setErroSelecaoExport("Selecione pelo menos uma área para gerar a escala.");
+      setErroSelecaoExport("Selecione pelo menos uma categoria ou função para gerar a escala.");
       return;
     }
     const alvo = modalExportAlvo;
@@ -694,6 +694,16 @@ export default function EscalaBoard({
               <button type="button" onClick={limparSelecaoExport} className="link">
                 Limpar seleção
               </button>
+              <span className="ml-auto text-[12px] font-semibold text-ink-600">
+                {(() => {
+                  const totalSelecionadas = todasFuncaoIdsExport.filter((id) => isSelecionadaExport(id)).length;
+                  const categoriasComSelecao = categorias.filter((c) =>
+                    c.funcoes.some((f) => isSelecionadaExport(f.id))
+                  ).length;
+                  if (totalSelecionadas === 0) return "Nada selecionado";
+                  return `${totalSelecionadas} função(ões) selecionada(s) em ${categoriasComSelecao} categoria(s)`;
+                })()}
+              </span>
             </div>
 
             <div className="flex-1 overflow-auto px-6 py-3">
