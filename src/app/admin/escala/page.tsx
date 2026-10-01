@@ -10,10 +10,10 @@ import EventosExtra from "@/components/EventosExtra";
 
 export const metadata = { title: "Escala | Admin" };
 
+/** Mês/ano atuais — é o que deve abrir por padrão sempre que a tela de escala é acessada sem ano/mês na URL. */
 function mesPadrao() {
   const hoje = new Date();
-  const proximo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-  return { ano: proximo.getFullYear(), mes: proximo.getMonth() };
+  return { ano: hoje.getFullYear(), mes: hoje.getMonth() };
 }
 
 export default async function AdminEscalaPage({

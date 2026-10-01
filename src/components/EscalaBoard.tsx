@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { definirAtribuicao, definirObservacao, definirMinisterioResponsavel } from "@/lib/actions/escala";
 import type { AtividadeDTO } from "@/lib/actions/atividade";
 import {
@@ -86,7 +86,6 @@ export default function EscalaBoard({
     ministeriosResponsaveisIniciais ?? {}
   );
   const [atividades, setAtividades] = useState<Record<string, AtividadeDTO[]>>(atividadesIniciais ?? {});
-  const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState<{
     alvo: PrintTarget;
     acao: "preview" | "baixar";
@@ -104,6 +103,29 @@ export default function EscalaBoard({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Indicador global de autosave (section 4 do pedido do admin) — reflete o
+   * estado de QUALQUER campo sendo digitado/salvo no momento, não um campo só.
+   * "digitando" enquanto há um debounce pendente, "salvando" enquanto a
+   * requisição está em voo, "erro" quando a última tentativa falhou (e aí o
+   * próprio commitSave/commitObservacao reagenda sozinho — não é o usuário
+   * quem precisa tentar de novo), "salvo" depois que tudo que estava
+   * pendente terminou com sucesso.
+   */
+  const [saveStatus, setSaveStatus] = useState<"idle" | "digitando" | "salvando" | "salvo" | "erro">("idle");
+  const inflightRef = useRef(0);
+  const tentativasErro = useRef<Record<string, number>>({});
+
+  function temPendenciaDeDigitacao() {
+    return Object.keys(saveTimers.current).length > 0 || Object.keys(obsTimers.current).length > 0;
+  }
+
+  /** Chamado depois que uma requisição termina (sucesso) — decide se ainda há outra coisa em fila ou se já pode mostrar "Salvo". */
+  function atualizarStatusAposRequisicao() {
+    if (inflightRef.current > 0) return;
+    setSaveStatus(temPendenciaDeDigitacao() ? "digitando" : "salvo");
+  }
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
 
@@ -249,21 +271,48 @@ export default function EscalaBoard({
     });
   }
 
+  /**
+   * Executa um salvamento com retry automático — se falhar (rede caiu, API
+   * fora do ar), não perde o texto digitado nem exige que o usuário tente de
+   * novo: reagenda sozinho com backoff crescente (até 10s) e continua
+   * tentando indefinidamente, pra pegar a conexão assim que ela voltar.
+   * `key` identifica o campo (pra uma nova digitação nele cancelar um retry
+   * antigo que esteja esperando pra disparar).
+   */
+  function commitComRetry(key: string, salvar: () => Promise<void>) {
+    inflightRef.current++;
+    setSaveStatus("salvando");
+    salvar()
+      .then(() => {
+        delete tentativasErro.current[key];
+        inflightRef.current--;
+        atualizarStatusAposRequisicao();
+      })
+      .catch(() => {
+        inflightRef.current--;
+        setSaveStatus("erro");
+        const tentativa = (tentativasErro.current[key] ?? 0) + 1;
+        tentativasErro.current[key] = tentativa;
+        const espera = Math.min(2000 * tentativa, 10000);
+        saveTimers.current[key] = setTimeout(() => commitComRetry(key, salvar), espera);
+      });
+  }
+
   function commitSave(data: string, funcaoId: string, nome: string | null) {
-    startTransition(async () => {
-      try {
-        await definirAtribuicao(data, funcaoId, nome);
-      } catch (e) {
-        alert(e instanceof Error ? e.message : "Não foi possível salvar.");
-      }
-    });
+    const key = `${data}:${funcaoId}`;
+    commitComRetry(key, () => definirAtribuicao(data, funcaoId, nome));
   }
 
   function handleTextChange(data: string, funcaoId: string, value: string) {
     applyLocalChange(data, funcaoId, value);
     const key = `${data}:${funcaoId}`;
     if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
-    saveTimers.current[key] = setTimeout(() => commitSave(data, funcaoId, value), SAVE_DEBOUNCE_MS);
+    delete tentativasErro.current[key];
+    setSaveStatus("digitando");
+    saveTimers.current[key] = setTimeout(() => {
+      delete saveTimers.current[key];
+      commitSave(data, funcaoId, value);
+    }, SAVE_DEBOUNCE_MS);
   }
 
   function handleBlurCommit(data: string, funcaoId: string, value: string) {
@@ -280,19 +329,19 @@ export default function EscalaBoard({
   }
 
   function commitObservacao(data: string, texto: string) {
-    startTransition(async () => {
-      try {
-        await definirObservacao(data, texto || null);
-      } catch (e) {
-        alert(e instanceof Error ? e.message : "Não foi possível salvar a observação.");
-      }
-    });
+    const key = `obs:${data}`;
+    commitComRetry(key, () => definirObservacao(data, texto || null));
   }
 
   function handleObsChange(data: string, value: string) {
     setObservacoes((old) => ({ ...old, [data]: value }));
     if (obsTimers.current[data]) clearTimeout(obsTimers.current[data]);
-    obsTimers.current[data] = setTimeout(() => commitObservacao(data, value), SAVE_DEBOUNCE_MS);
+    delete tentativasErro.current[`obs:${data}`];
+    setSaveStatus("digitando");
+    obsTimers.current[data] = setTimeout(() => {
+      delete obsTimers.current[data];
+      commitObservacao(data, value);
+    }, SAVE_DEBOUNCE_MS);
   }
 
   function handleObsBlur(data: string, value: string) {
@@ -303,16 +352,10 @@ export default function EscalaBoard({
     commitObservacao(data, value);
   }
 
-  /** Ministério/departamento responsável por organizar o culto (só sábado/domingo) — commit direto, sem debounce (é um select, não texto). */
+  /** Ministério/departamento responsável por organizar o culto (só sábado/domingo) — commit direto, sem debounce (é um select, não texto), mas com o mesmo retry automático dos outros campos. */
   function handleMinisterioResponsavelChange(data: string, valor: string) {
     setMinisteriosResponsaveis((old) => ({ ...old, [data]: valor }));
-    startTransition(async () => {
-      try {
-        await definirMinisterioResponsavel(data, valor || null);
-      } catch (e) {
-        alert(e instanceof Error ? e.message : "Não foi possível salvar o ministério responsável.");
-      }
-    });
+    commitComRetry(`min:${data}`, () => definirMinisterioResponsavel(data, valor || null));
   }
 
   function handleAtividadesChange(data: string, novas: AtividadeDTO[]) {
@@ -545,11 +588,13 @@ export default function EscalaBoard({
     for (const [key, timer] of pendentes) {
       clearTimeout(timer);
       delete saveTimers.current[key];
+      delete tentativasErro.current[key];
     }
     const pendentesObs = Object.entries(obsTimers.current);
     for (const [data, timer] of pendentesObs) {
       clearTimeout(timer);
       delete obsTimers.current[data];
+      delete tentativasErro.current[`obs:${data}`];
     }
     setSalvandoTudo(true);
     try {
@@ -564,6 +609,7 @@ export default function EscalaBoard({
       if (toastTimer.current) clearTimeout(toastTimer.current);
       setToast("Escala salva com sucesso! ✅");
       toastTimer.current = setTimeout(() => setToast(null), 3000);
+      setSaveStatus("salvo");
     } catch (e) {
       alert(e instanceof Error ? e.message : "Não foi possível salvar tudo.");
     } finally {
@@ -812,21 +858,29 @@ export default function EscalaBoard({
   return (
     <div>
       <div className="no-print mb-4 flex flex-wrap items-center gap-3">
-        {showExport && (
-          <span className="mr-auto text-[12.5px] font-semibold text-ink-400">
-            {temAlgumaFuncao && (
-              <>
-                <b className="text-ink-600">{diasDoMes.length}</b> culto(s) neste mês ·{" "}
-                <b className="text-ink-600">{cultosCompletos}</b> completo(s)
-              </>
-            )}
-          </span>
-        )}
+        <div className="mr-auto flex flex-wrap items-center gap-3">
+          {saveStatus !== "idle" && (
+            <span className="flex items-center gap-1.5 text-[12.5px] font-semibold">
+              {saveStatus === "digitando" && <span className="text-ink-400">✏️ Digitando...</span>}
+              {saveStatus === "salvando" && <span className="text-ink-400">⏳ Salvando...</span>}
+              {saveStatus === "salvo" && <span className="text-green-600">✓ Salvo automaticamente</span>}
+              {saveStatus === "erro" && (
+                <span className="text-orange-600">⚠️ Não foi possível salvar. Tentando novamente...</span>
+              )}
+            </span>
+          )}
+          {showExport && temAlgumaFuncao && (
+            <span className="text-[12.5px] font-semibold text-ink-400">
+              <b className="text-ink-600">{diasDoMes.length}</b> culto(s) neste mês ·{" "}
+              <b className="text-ink-600">{cultosCompletos}</b> completo(s)
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={handleSalvarTudo}
           disabled={salvandoTudo}
-          className={showExport ? "btn-secondary" : "btn-primary ml-auto"}
+          className={showExport ? "btn-secondary" : "btn-primary"}
         >
           {salvandoTudo ? "Salvando..." : "💾 Salvar"}
         </button>
