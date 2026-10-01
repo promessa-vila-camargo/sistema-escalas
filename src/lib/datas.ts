@@ -34,6 +34,17 @@ export function chaveNoite(data: string) {
  */
 export const FUNCOES_SEM_REPETICAO_DOMINGO = ["Diretor(a)", "Palavra Pastoral", "Pregador"];
 
+/** Ministério/departamento responsável por organizar o culto de sábado/domingo. */
+export const MINISTERIOS_RESPONSAVEIS = [
+  "LITURGIA",
+  "MINISTÉRIO DE HOMENS",
+  "MINISTÉRIO DE MULHERES",
+  "COMUNICAÇÃO",
+  "MINISTÉRIO DE CRIANÇA E ADOLESCENTES",
+  "MINISTÉRIO DE PROCLAMAÇÃO",
+  "MINISTÉRIO DE ENSINO",
+];
+
 export function fmtDDMM(y: number, m: number, d: number) {
   return `${pad2(d)}/${pad2(m + 1)}`;
 }

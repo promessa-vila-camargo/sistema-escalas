@@ -1,8 +1,17 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { definirAtribuicao, definirObservacao, definirEventoNoite, type Turno } from "@/lib/actions/escala";
-import { buildMonthDays, buildMonthDaysFlat, fmtDDMM, nomeDiaSemana, nomeMes, chaveNoite, FUNCOES_SEM_REPETICAO_DOMINGO } from "@/lib/datas";
+import { definirAtribuicao, definirObservacao, definirEventoNoite, definirMinisterioResponsavel, type Turno } from "@/lib/actions/escala";
+import {
+  buildMonthDays,
+  buildMonthDaysFlat,
+  fmtDDMM,
+  nomeDiaSemana,
+  nomeMes,
+  chaveNoite,
+  FUNCOES_SEM_REPETICAO_DOMINGO,
+  MINISTERIOS_RESPONSAVEIS,
+} from "@/lib/datas";
 import type { CurrentUser } from "@/lib/auth/dal";
 
 const EMOJI_MINISTERIO: Record<string, string> = {
@@ -38,6 +47,7 @@ export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: F
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
 export type ObservacaoMap = Record<string, string>;
 export type EventoNoiteMap = Record<string, boolean>;
+export type MinisterioResponsavelMap = Record<string, string>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
 type PrintTarget = "mes" | DiaInfo;
@@ -52,6 +62,7 @@ export default function EscalaBoard({
   atribuicoesIniciais,
   observacoesIniciais,
   eventosNoiteIniciais,
+  ministeriosResponsaveisIniciais,
   currentUser,
   showExport,
 }: {
@@ -61,12 +72,16 @@ export default function EscalaBoard({
   atribuicoesIniciais: AtribuicaoMap;
   observacoesIniciais?: ObservacaoMap;
   eventosNoiteIniciais?: EventoNoiteMap;
+  ministeriosResponsaveisIniciais?: MinisterioResponsavelMap;
   currentUser: CurrentUser;
   showExport?: boolean;
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [observacoes, setObservacoes] = useState<ObservacaoMap>(observacoesIniciais ?? {});
   const [eventosNoite, setEventosNoite] = useState<EventoNoiteMap>(eventosNoiteIniciais ?? {});
+  const [ministeriosResponsaveis, setMinisteriosResponsaveis] = useState<MinisterioResponsavelMap>(
+    ministeriosResponsaveisIniciais ?? {}
+  );
   const [ativandoNoite, setAtivandoNoite] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState<{
@@ -256,6 +271,18 @@ export default function EscalaBoard({
     }
   }
 
+  /** Ministério/departamento responsável por organizar o culto (só sábado/domingo) — commit direto, sem debounce (é um select, não texto). */
+  function handleMinisterioResponsavelChange(data: string, valor: string) {
+    setMinisteriosResponsaveis((old) => ({ ...old, [data]: valor }));
+    startTransition(async () => {
+      try {
+        await definirMinisterioResponsavel(data, valor || null);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Não foi possível salvar o ministério responsável.");
+      }
+    });
+  }
+
   function renderCard(data: string, dia: number, diaSemana: number) {
     const categoriasCard = categoriasDoDia(diaSemana);
     const totalCard = categoriasCard.reduce((n, c) => n + c.funcoes.length, 0);
@@ -296,6 +323,28 @@ export default function EscalaBoard({
             </button>
           )}
         </div>
+
+        {(diaSemana === 6 || diaSemana === 0) && (isAdmin || ministeriosResponsaveis[data]) && (
+          <div className="mb-2.5 flex items-center gap-2 border-b border-brand-100 pb-2">
+            <span className="text-[11px] font-semibold text-ink-600">🏛️</span>
+            {isAdmin ? (
+              <select
+                value={ministeriosResponsaveis[data] ?? ""}
+                onChange={(e) => handleMinisterioResponsavelChange(data, e.target.value)}
+                className="flex-1 rounded-md border border-brand-200 bg-white px-2 py-1 text-[11px] font-semibold text-ink-900 outline-none focus:border-orange-500"
+              >
+                <option value="">Ministério responsável — selecionar</option>
+                {MINISTERIOS_RESPONSAVEIS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="badge-neutral">{ministeriosResponsaveis[data]}</span>
+            )}
+          </div>
+        )}
 
         {categoriasCard.length === 0 && (
           <p className="text-[11.5px] text-ink-400">
@@ -456,6 +505,30 @@ export default function EscalaBoard({
     }
   }
 
+  /** Monta e abre uma mensagem de WhatsApp com a escala do mês inteiro (como vocês costumam enviar), um culto após o outro. */
+  function handleCompartilharMesWhatsapp() {
+    const linhas: string[] = [`📋 *Escala — ${nomeMes(mes)} de ${ano}*`, ""];
+    for (const d of diasDoMes) {
+      const categoriasDia = categoriasDoDia(d.diaSemana);
+      if (categoriasDia.length === 0) continue;
+
+      linhas.push(`*${nomeDiaSemana(d.diaSemana)} · ${fmtDDMM(ano, mes, d.dia)}*`);
+      const ministerio = ministeriosResponsaveis[d.data];
+      if (ministerio) linhas.push(`🏛️ ${ministerio}`);
+      for (const cat of categoriasDia) {
+        for (const f of cat.funcoes) {
+          const nome = (atribuicoes[d.data]?.[f.id] ?? "").trim();
+          linhas.push(`${emojiFuncao(f.nome)} ${f.nome}: ${nome || "❌ (pendente)"}`);
+        }
+      }
+      const nota = (observacoes[d.data] ?? "").trim();
+      if (nota) linhas.push(`📝 ${nota}`);
+      linhas.push("");
+    }
+    const texto = linhas.join("\n");
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
+  }
+
   /** Botão "Salvar": força o commit imediato de tudo que ainda estava esperando o debounce e avisa com um toast. */
   async function handleSalvarTudo() {
     const pendentes = Object.entries(saveTimers.current);
@@ -494,6 +567,15 @@ export default function EscalaBoard({
     const texto = (observacoes[data] ?? "").trim();
     if (!texto) return null;
     return <p className="mt-1.5 text-[10px] italic leading-snug text-ink-600">📝 {texto}</p>;
+  }
+
+  /** Ministério responsável pelo culto, pro PDF (só aparece quando definido). */
+  function renderMinisterioResponsavelNota(data: string) {
+    const ministerio = ministeriosResponsaveis[data];
+    if (!ministerio) return null;
+    return (
+      <p className="mb-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-pdfblue">🏛️ {ministerio}</p>
+    );
   }
 
   function categoriasDoDiaCompleto(diaSemana: number) {
@@ -634,6 +716,11 @@ export default function EscalaBoard({
           {salvandoTudo ? "Salvando..." : "💾 Salvar"}
         </button>
         {showExport && (
+          <button type="button" onClick={handleCompartilharMesWhatsapp} className="btn-secondary">
+            📲 Compartilhar mês no WhatsApp
+          </button>
+        )}
+        {showExport && (
           <button type="button" onClick={() => handleExportClick("mes")} className="btn-primary">
             📄 Exportar PDF do mês
           </button>
@@ -743,6 +830,9 @@ export default function EscalaBoard({
                   {nomeDiaSemana(d.diaSemana)} • {fmtDDMM(ano, mes, d.dia)}/{ano}
                   {eventosNoite[d.data] && <span className="ml-1 font-normal normal-case text-ink-600">· 🌙 tem evento à noite</span>}
                 </div>
+                {ministeriosResponsaveis[d.data] && (
+                  <div className="mb-0.5 text-[9px] font-semibold text-ink-600">🏛️ {ministeriosResponsaveis[d.data]}</div>
+                )}
                 {renderMinisterioCompacto(d)}
                 {renderObsNota(d.data)}
               </div>
@@ -797,6 +887,7 @@ export default function EscalaBoard({
                     <div className="mb-3 rounded-full bg-pdfblue px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
                       Sábado · {fmtDDMM(ano, mes, par.sab.dia)}
                     </div>
+                    {renderMinisterioResponsavelNota(par.sab.data)}
                     {renderColunaCulto(par.sab)}
                     {renderColunaNoite(par.sab)}
                     {renderObsNota(par.sab.data)}
@@ -805,6 +896,7 @@ export default function EscalaBoard({
                     <div className="mb-3 rounded-full bg-pdforange px-4 py-1.5 text-center font-heading text-[13px] font-extrabold uppercase tracking-wide text-white">
                       Domingo · {fmtDDMM(ano, mes, par.dom.dia)}
                     </div>
+                    {renderMinisterioResponsavelNota(par.dom.data)}
                     {renderColunaCulto(par.dom)}
                     {renderColunaNoite(par.dom)}
                     {renderObsNota(par.dom.data)}

@@ -1,6 +1,6 @@
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes, buscarObservacoes, buscarEventosNoite } from "@/lib/actions/escala";
+import { buscarAtribuicoes, buscarObservacoes, buscarEventosNoite, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
 import { isoDate } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
@@ -34,6 +34,7 @@ export default async function AdminEscalaPage({
   const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
   const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
   const eventosNoite = await buscarEventosNoite(primeiroDia, ultimoDia);
+  const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
 
@@ -50,6 +51,7 @@ export default async function AdminEscalaPage({
         atribuicoesIniciais={atribuicoes}
         observacoesIniciais={observacoes}
         eventosNoiteIniciais={eventosNoite}
+        ministeriosResponsaveisIniciais={ministeriosResponsaveis}
         currentUser={user}
         showExport
       />

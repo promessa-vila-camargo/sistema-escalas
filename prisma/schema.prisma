@@ -88,13 +88,15 @@ model Atribuicao {
 }
 
 /**
- * Observação livre por culto (ex.: "também teremos culto à noite às 19h") e
- * a flag "tem evento à noite" — só o admin escreve, todo mundo que vê aquele
- * dia lê.
+ * Observação livre por culto (ex.: "também teremos culto à noite às 19h"),
+ * a flag "tem evento à noite" e o ministério/departamento responsável por
+ * organizar aquele culto (só faz sentido sábado/domingo) — só o admin
+ * escreve, todo mundo que vê aquele dia lê.
  */
 model CultoNota {
-  id             String   @id @default(cuid())
-  data           DateTime @unique @db.Date
-  texto          String?
-  temEventoNoite Boolean  @default(false)
+  id                    String   @id @default(cuid())
+  data                  DateTime @unique @db.Date
+  texto                 String?
+  temEventoNoite        Boolean  @default(false)
+  ministerioResponsavel String?
 }

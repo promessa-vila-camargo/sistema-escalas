@@ -89,7 +89,7 @@ export async function definirObservacao(data: string, texto: string | null) {
   const textoLimpo = texto?.trim() || null;
   const existente = await prisma.cultoNota.findUnique({ where: { data: dataObj } });
 
-  if (!textoLimpo && !existente?.temEventoNoite) {
+  if (!textoLimpo && !existente?.temEventoNoite && !existente?.ministerioResponsavel) {
     await prisma.cultoNota.deleteMany({ where: { data: dataObj } });
   } else {
     await prisma.cultoNota.upsert({
@@ -162,5 +162,42 @@ export async function buscarEventosNoite(dataInicio: string, dataFim: string): P
   });
   const out: EventoNoiteMap = {};
   for (const row of rows) out[row.data.toISOString().slice(0, 10)] = true;
+  return out;
+}
+
+/** Ministério/departamento responsável por organizar o culto (só sábado/domingo) — só o admin escolhe. */
+export async function definirMinisterioResponsavel(data: string, ministerio: string | null) {
+  const me = await verifySession();
+  if (me.role !== "ADMIN") {
+    throw new Error("Só o administrador pode definir o ministério responsável.");
+  }
+
+  const dataObj = new Date(data);
+  const existente = await prisma.cultoNota.findUnique({ where: { data: dataObj } });
+
+  if (!ministerio && !existente?.temEventoNoite && !existente?.texto) {
+    await prisma.cultoNota.deleteMany({ where: { data: dataObj } });
+  } else {
+    await prisma.cultoNota.upsert({
+      where: { data: dataObj },
+      update: { ministerioResponsavel: ministerio },
+      create: { data: dataObj, ministerioResponsavel: ministerio, temEventoNoite: false },
+    });
+  }
+
+  revalidatePath("/admin/escala");
+  revalidatePath("/escala");
+}
+
+export type MinisterioResponsavelMap = Record<string, string>; // data -> ministério
+
+export async function buscarMinisteriosResponsaveis(dataInicio: string, dataFim: string): Promise<MinisterioResponsavelMap> {
+  const rows = await prisma.cultoNota.findMany({
+    where: { data: { gte: new Date(dataInicio), lte: new Date(dataFim) }, ministerioResponsavel: { not: null } },
+  });
+  const out: MinisterioResponsavelMap = {};
+  for (const row of rows) {
+    if (row.ministerioResponsavel) out[row.data.toISOString().slice(0, 10)] = row.ministerioResponsavel;
+  }
   return out;
 }
