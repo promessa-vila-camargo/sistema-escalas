@@ -10,6 +10,7 @@ import {
   nomeDiaSemana,
   nomeMes,
   nomeMesAbrev,
+  labelFuncao,
   FUNCOES_SEM_REPETICAO_DOMINGO,
   MINISTERIOS_RESPONSAVEIS,
 } from "@/lib/datas";
@@ -450,8 +451,8 @@ export default function EscalaBoard({
 
                 return (
                   <div key={f.id} className="leader-row">
-                    <span className="leader-label" title={f.nome}>
-                      {emojiFuncao(f.nome)} {f.nome}
+                    <span className="leader-label" title={labelFuncao(f.nome, diaSemana)}>
+                      {emojiFuncao(f.nome)} {labelFuncao(f.nome, diaSemana)}
                     </span>
                     <span className="leader-fill" />
                     {editavel ? (
@@ -571,7 +572,7 @@ export default function EscalaBoard({
       for (const cat of categoriasDia) {
         for (const f of cat.funcoes) {
           const nome = (atribuicoes[d.data]?.[f.id] ?? "").trim();
-          linhas.push(`${emojiFuncao(f.nome)} ${f.nome}: ${nome || "❌ (pendente)"}`);
+          linhas.push(`${emojiFuncao(f.nome)} ${labelFuncao(f.nome, d.diaSemana)}: ${nome || "❌ (pendente)"}`);
         }
       }
       const nota = (observacoes[d.data] ?? "").trim();
@@ -632,7 +633,7 @@ export default function EscalaBoard({
     const out: string[] = [];
     for (const cat of categoriasDoDiaCompleto(diaSemana)) {
       for (const f of cat.funcoes) {
-        if (!atribuicoes[data]?.[f.id]?.trim()) out.push(f.nome);
+        if (!atribuicoes[data]?.[f.id]?.trim()) out.push(labelFuncao(f.nome, diaSemana));
       }
     }
     return out;
@@ -714,14 +715,20 @@ export default function EscalaBoard({
     return (atribuicoes[data]?.[funcaoId] ?? "").trim();
   }
 
-  /** Lista plana de função+valor pra um dia específico — já filtrada pelo dia da semana, pela seleção do modal de exportação e por quem tem alguém escalado (função vazia nem aparece). */
-  function funcoesDoDiaCard(dia: DiaInfo): { id: string; nome: string; valor: string }[] {
-    const out: { id: string; nome: string; valor: string }[] = [];
+  /**
+   * Lista plana de função+valor pra um dia específico — já filtrada pelo dia
+   * da semana, pela seleção do modal de exportação e por quem tem alguém
+   * escalado (função vazia nem aparece). `nome` é o nome real da função (pra
+   * identificar o emoji certo) e `label` é o rótulo a exibir — igual ao
+   * `nome`, exceto na quarta-feira, onde "Palavra Pastoral" vira "Apoio".
+   */
+  function funcoesDoDiaCard(dia: DiaInfo): { id: string; nome: string; label: string; valor: string }[] {
+    const out: { id: string; nome: string; label: string; valor: string }[] = [];
     for (const cat of categorias) {
       for (const f of cat.funcoes) {
         if (!f.diasSemana.includes(dia.diaSemana) || !isSelecionadaExport(f.id)) continue;
         const valor = valorFuncao(dia.data, f.id);
-        if (valor) out.push({ id: f.id, nome: f.nome, valor });
+        if (valor) out.push({ id: f.id, nome: f.nome, label: labelFuncao(f.nome, dia.diaSemana), valor });
       }
     }
     return out;
@@ -769,11 +776,11 @@ export default function EscalaBoard({
           ) : (
             <>
               {funcoes.map((f, i) => (
-                <div key={f.id} className={`py-1 ${i > 0 ? "border-t border-white/10" : ""}`}>
-                  <div className="text-[7.5px] font-bold uppercase tracking-wide text-white/55">
-                    {emojiFuncao(f.nome)} {f.nome}
+                <div key={f.id} className={`py-1.5 text-center ${i > 0 ? "border-t border-white/10" : ""}`}>
+                  <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-white">
+                    {emojiFuncao(f.nome)} {f.label}
                   </div>
-                  <div className="text-[12px] font-bold uppercase leading-snug text-white">{f.valor}</div>
+                  <div className="mt-0.5 text-[10px] font-semibold uppercase leading-snug text-white/70">{f.valor}</div>
                 </div>
               ))}
               {notas.length > 0 && (
@@ -963,15 +970,23 @@ export default function EscalaBoard({
                     </div>
                     {expandida && (
                       <div className="flex flex-col gap-1 border-t border-brand-100 py-2 pl-12 pr-3">
-                        {cat.funcoes.map((f) => (
-                          <CheckboxTriState
-                            key={f.id}
-                            checked={isSelecionadaExport(f.id)}
-                            indeterminate={false}
-                            onChange={() => toggleFuncaoExport(f.id)}
-                            label={`${emojiFuncao(f.nome)} ${f.nome}`}
-                          />
-                        ))}
+                        {cat.funcoes.map((f) => {
+                          // Alvo de um dia específico (fim de semana ou quarta) já sabe o dia da semana e troca o rótulo
+                          // (ex.: "Apoio" numa quarta); alvo "mês inteiro" cobre dias variados, então mostra o nome puro.
+                          const label =
+                            modalExportAlvo && modalExportAlvo !== "mes"
+                              ? labelFuncao(f.nome, modalExportAlvo.diaSemana)
+                              : f.nome;
+                          return (
+                            <CheckboxTriState
+                              key={f.id}
+                              checked={isSelecionadaExport(f.id)}
+                              indeterminate={false}
+                              onChange={() => toggleFuncaoExport(f.id)}
+                              label={`${emojiFuncao(f.nome)} ${label}`}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </div>

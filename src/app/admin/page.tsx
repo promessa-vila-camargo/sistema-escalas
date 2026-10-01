@@ -2,7 +2,7 @@ import Link from "next/link";
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
-import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM } from "@/lib/datas";
+import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM, labelFuncao } from "@/lib/datas";
 import { emojiMinisterio } from "@/lib/emojis";
 
 export const metadata = { title: "Início | Admin" };
@@ -72,7 +72,7 @@ export default async function AdminHomePage() {
   if (proxima && funcoesProxima.length > 0) {
     const linhas = funcoesProxima.map((f) => {
       const nome = (atribuicoesMes[proxima.data]?.[f.funcaoId] ?? "").trim();
-      return `${emojiMinisterio(f.catNome)} ${f.funcaoNome}: ${nome || "❌ (pendente)"}`;
+      return `${emojiMinisterio(f.catNome)} ${labelFuncao(f.funcaoNome, proxima.diaSemana)}: ${nome || "❌ (pendente)"}`;
     });
     const nota = (observacoesMes[proxima.data] ?? "").trim();
     const texto = [
@@ -129,7 +129,7 @@ export default async function AdminHomePage() {
                     className="flex items-center justify-between gap-3 rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2"
                   >
                     <span className="text-[13px] font-medium text-ink-900">
-                      {emojiMinisterio(f.catNome)} {f.funcaoNome}
+                      {emojiMinisterio(f.catNome)} {labelFuncao(f.funcaoNome, proxima?.diaSemana ?? -1)}
                       <span className="ml-1.5 text-ink-400">— {f.catNome}</span>
                     </span>
                     <Link href={linkEscalaProxima} className="link whitespace-nowrap">

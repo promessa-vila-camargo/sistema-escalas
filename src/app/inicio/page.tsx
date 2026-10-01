@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
-import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM } from "@/lib/datas";
+import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM, labelFuncao } from "@/lib/datas";
 import { emojiMinisterio } from "@/lib/emojis";
 import TopNav from "@/components/TopNav";
 
@@ -75,7 +75,7 @@ export default async function InicioPage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2"
                     >
                       <span className="text-[13px] font-medium text-ink-900">
-                        {emojiMinisterio(f.categoria.nome)} {f.nome}
+                        {emojiMinisterio(f.categoria.nome)} {labelFuncao(f.nome, proxima.diaSemana)}
                       </span>
                       <span className={"text-[13px] font-bold uppercase " + (nome ? "text-brand-700" : "italic font-medium normal-case text-ink-400")}>
                         {nome || "não preenchido"}

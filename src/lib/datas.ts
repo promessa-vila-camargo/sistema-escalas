@@ -36,6 +36,22 @@ export function addDays(iso: string, delta: number) {
  */
 export const FUNCOES_SEM_REPETICAO_DOMINGO = ["Diretor(a)", "Palavra Pastoral", "Pregador"];
 
+const NOME_FUNCAO_PALAVRA_PASTORAL = "palavra pastoral";
+
+/**
+ * Regra de negócio: na quarta-feira a função "Palavra Pastoral" é chamada de
+ * "Apoio" em toda a interface, relatório, modal de exportação e PDF — mas o
+ * registro no banco (Funcao.nome, Atribuicao.funcaoId) nunca muda, só o
+ * RÓTULO exibido é diferente dependendo do dia da semana da data em questão.
+ * Centralizada aqui pra não duplicar essa condição em cada tela.
+ */
+export function labelFuncao(nomeFuncao: string, diaSemana: number): string {
+  if (diaSemana === 3 && nomeFuncao.trim().toLowerCase() === NOME_FUNCAO_PALAVRA_PASTORAL) {
+    return "Apoio";
+  }
+  return nomeFuncao;
+}
+
 /** Ministério/departamento responsável por organizar o culto de sábado/domingo. */
 export const MINISTERIOS_RESPONSAVEIS = [
   "LITURGIA",
