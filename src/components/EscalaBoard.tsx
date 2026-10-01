@@ -392,7 +392,7 @@ export default function EscalaBoard({
               {completa ? "Completa" : `${filled}/${totalCard}`}
             </span>
           )}
-          {isAdmin && (
+          {showExport && (
             <button
               type="button"
               title="Gerar PDF desta escala"
