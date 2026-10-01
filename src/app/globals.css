@@ -158,6 +158,15 @@ h3 {
     display: none !important;
   }
 
+  /* Sem isso, o navegador some com toda cor de fundo (faixa colorida, quadro
+     escuro do card) na hora de imprimir/gerar o PDF — ele assume que é
+     "gráfico decorativo" e economiza tinta, a não ser que a página force. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 10mm;
