@@ -2,6 +2,7 @@ import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
 import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
+import { buscarAtividades } from "@/lib/actions/atividade";
 import { isoDate, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
 import TopNav from "@/components/TopNav";
 import MonthYearPicker from "@/components/MonthYearPicker";
@@ -38,6 +39,7 @@ export default async function EscalaVoluntarioPage({
   const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
   const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(primeiroDia, ultimoDia);
   const eventosExtra = await buscarEventosExtra();
+  const atividades = await buscarAtividades(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
@@ -63,6 +65,7 @@ export default async function EscalaVoluntarioPage({
           atribuicoesIniciais={atribuicoes}
           observacoesIniciais={observacoes}
           ministeriosResponsaveisIniciais={ministeriosResponsaveis}
+          atividadesIniciais={atividades}
           currentUser={user}
         />
         <EventosExtra categorias={categoriasExtraordinaria} eventosIniciais={eventosExtra} currentUser={user} />

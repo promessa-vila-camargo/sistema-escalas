@@ -128,3 +128,25 @@ model EventoExtraAtribuicao {
 
   @@unique([eventoId, funcaoId])
 }
+
+/**
+ * Atividade adicional de um dia (ex.: "Dia das Crianças", "Café dos
+ * Professores") — conceito totalmente separado das funções da escala
+ * (Diretor, Mídia, Som etc.). Várias atividades podem existir na mesma
+ * data; nenhuma atividade não é modelada como lista vazia, sem flag
+ * booleana redundante. Não tem relação com Funcao/Categoria de propósito —
+ * "ministerio" é texto livre porque nem todo responsável por uma atividade
+ * (ex.: "MCA") é um dos ministérios cadastrados em MINISTERIOS_RESPONSAVEIS.
+ */
+model AtividadeDia {
+  id         String   @id @default(cuid())
+  data       DateTime @db.Date
+  titulo     String
+  horario    String?
+  ministerio String?
+  descricao  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([data])
+}

@@ -2,6 +2,7 @@ import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
 import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
+import { buscarAtividades } from "@/lib/actions/atividade";
 import { isoDate, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
@@ -37,6 +38,7 @@ export default async function AdminEscalaPage({
   const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
   const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(primeiroDia, ultimoDia);
   const eventosExtra = await buscarEventosExtra();
+  const atividades = await buscarAtividades(primeiroDia, ultimoDia);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
@@ -57,6 +59,7 @@ export default async function AdminEscalaPage({
         atribuicoesIniciais={atribuicoes}
         observacoesIniciais={observacoes}
         ministeriosResponsaveisIniciais={ministeriosResponsaveis}
+        atividadesIniciais={atividades}
         currentUser={user}
         showExport
       />
