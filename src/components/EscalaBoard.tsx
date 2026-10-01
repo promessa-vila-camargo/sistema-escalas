@@ -578,121 +578,6 @@ export default function EscalaBoard({
     return out;
   }
 
-  /**
-   * Cartão de um dia pro PDF — unifica o que antes eram 4 funções
-   * separadas (ministério responsável, observação, categorias/funções e
-   * atividades) numa única peça visual: badge de data grande, categorias
-   * agrupadas sem leader-dots (não é tabela), bloco de atividades com
-   * identidade própria. `grande` controla o tamanho (compacto no PDF do
-   * mês inteiro, espaçoso no PDF de um culto/fim de semana só).
-   */
-  function renderDiaPdfCard(item: DiaInfo, grande: boolean) {
-    const categoriasDia = categoriasDoDiaCompleto(item.diaSemana);
-    const ministerio = ministeriosResponsaveis[item.data];
-    const nota = (observacoes[item.data] ?? "").trim();
-    const listaAtividades = incluirAtividadesExport ? (atividades[item.data] ?? []) : [];
-    const corFaixa = item.diaSemana === 0 ? "border-pdforange" : "border-pdfblue";
-    const corBadge = item.diaSemana === 0 ? "bg-pdforange" : "bg-pdfblue";
-
-    return (
-      <div
-        className={
-          "break-inside-avoid rounded-2xl border border-pdfgray bg-white " + (grande ? "mb-5 p-4" : "mb-3.5 p-3")
-        }
-      >
-        <div className={"mb-2.5 flex items-center gap-2.5 border-b-2 pb-2 " + corFaixa}>
-          <div
-            className={
-              "flex flex-none flex-col items-center justify-center rounded-xl text-white " +
-              corBadge +
-              " " +
-              (grande ? "h-14 w-14" : "h-10 w-10")
-            }
-          >
-            <span className={"font-heading font-extrabold leading-none tabular-nums " + (grande ? "text-[22px]" : "text-[15px]")}>
-              {String(item.dia).padStart(2, "0")}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span
-              className={
-                "font-heading font-extrabold uppercase tracking-wide text-pdfblue " + (grande ? "text-[16px]" : "text-[11px]")
-              }
-            >
-              {nomeDiaSemana(item.diaSemana)}
-            </span>
-            {ministerio && (
-              <span className={"font-bold uppercase tracking-wide text-pdforange " + (grande ? "text-[11px]" : "text-[8.5px]")}>
-                🏛️ {ministerio}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className={grande ? "flex flex-col gap-3" : "flex flex-col gap-1.5"}>
-          {categoriasDia.map((cat) => (
-            <div key={cat.id}>
-              <div
-                className={
-                  "mb-0.5 font-heading font-extrabold uppercase tracking-wide text-pdforange " +
-                  (grande ? "text-[11px]" : "text-[8px]")
-                }
-              >
-                {emojiMinisterio(cat.nome)} {cat.nome}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {cat.funcoes.map((f) => {
-                  const nomeEsc = (atribuicoes[item.data]?.[f.id] ?? "").trim();
-                  return (
-                    <div
-                      key={f.id}
-                      className={"flex items-baseline justify-between gap-2 " + (grande ? "text-[11.5px]" : "text-[9px]")}
-                    >
-                      <span className="font-medium text-ink-600">
-                        {emojiFuncao(f.nome)} {f.nome}
-                      </span>
-                      <span
-                        className={
-                          "text-right font-bold uppercase " +
-                          (nomeEsc ? "text-pdfblue" : "italic font-normal normal-case text-ink-400")
-                        }
-                      >
-                        {nomeEsc || (grande ? "não preenchido" : "—")}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {listaAtividades.length > 0 && (
-          <div className={"mt-2.5 rounded-xl border border-dashed border-pdforange bg-orange-50 " + (grande ? "p-2.5" : "p-1.5")}>
-            <div
-              className={
-                "mb-1 font-heading font-extrabold uppercase tracking-wide text-pdforange " + (grande ? "text-[10px]" : "text-[7.5px]")
-              }
-            >
-              🎉 Atividades do dia
-            </div>
-            <div className="flex flex-col gap-0.5">
-              {listaAtividades.map((a) => (
-                <div key={a.id} className={grande ? "text-[10.5px]" : "text-[8px]"}>
-                  {a.horario && <span className="font-bold tabular-nums text-pdforange">{a.horario} </span>}
-                  <span className="font-semibold text-ink-900">{a.titulo}</span>
-                  {a.ministerio && <span className="text-ink-600"> · {a.ministerio}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {nota && <p className={"mt-1.5 italic text-ink-600 " + (grande ? "text-[10.5px]" : "text-[8px]")}>📝 {nota}</p>}
-      </div>
-    );
-  }
-
   /** Encontra o outro dia do mesmo fim de semana (sábado <-> domingo seguinte), se existir no mês. */
   function encontrarParDeFds(item: DiaInfo): { sab: DiaInfo; dom: DiaInfo } | null {
     if (item.diaSemana === 6) {
@@ -707,6 +592,232 @@ export default function EscalaBoard({
     return null;
   }
 
+  type LinhaTabela = { tipo: "fds"; sab: DiaInfo | null; dom: DiaInfo | null } | { tipo: "qua"; dia: DiaInfo };
+
+  /** Todas as linhas do mês (fim de semana + quarta), em ordem cronológica — base da tabela de programação. */
+  function construirLinhasTabela(): LinhaTabela[] {
+    const linhas: LinhaTabela[] = [
+      ...fdsPares.map((par): LinhaTabela => ({ tipo: "fds", sab: par.sab, dom: par.dom })),
+      ...dias.qua.map((d): LinhaTabela => ({ tipo: "qua", dia: d })),
+    ];
+    return linhas.sort((a, b) => {
+      const da = a.tipo === "fds" ? (a.sab ?? a.dom)!.data : a.dia.data;
+      const db = b.tipo === "fds" ? (b.sab ?? b.dom)!.data : b.dia.data;
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+  }
+
+  /** Uma única linha, pro PDF de um culto/fim de semana específico (em vez do mês inteiro). */
+  function linhaParaAlvo(alvo: DiaInfo): LinhaTabela {
+    if (alvo.diaSemana === 3) return { tipo: "qua", dia: alvo };
+    const par = encontrarParDeFds(alvo);
+    if (par) return { tipo: "fds", sab: par.sab, dom: par.dom };
+    return alvo.diaSemana === 6 ? { tipo: "fds", sab: alvo, dom: null } : { tipo: "fds", sab: null, dom: alvo };
+  }
+
+  /** Categorias/funções que vão virar colunas — já filtradas pelo que foi escolhido no modal de exportação. */
+  function categoriasTabela() {
+    return categorias
+      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => isSelecionadaExport(f.id)) }))
+      .filter((c) => c.funcoes.length > 0);
+  }
+
+  function valorFuncao(data: string | null, funcaoId: string) {
+    if (!data) return "";
+    return (atribuicoes[data]?.[funcaoId] ?? "").trim();
+  }
+
+  /** Célula de uma categoria numa linha de fim de semana — empilha sábado/domingo; função vazia nos dois dias nem aparece. */
+  function renderCelulaFds(cat: CategoriaDTO, sab: DiaInfo | null, dom: DiaInfo | null) {
+    const funcoesAplicaveis = cat.funcoes.filter(
+      (f) => (sab && f.diasSemana.includes(6)) || (dom && f.diasSemana.includes(0))
+    );
+    const linhasFuncao = funcoesAplicaveis
+      .map((f) => ({
+        f,
+        vSab: sab && f.diasSemana.includes(6) ? valorFuncao(sab.data, f.id) : "",
+        vDom: dom && f.diasSemana.includes(0) ? valorFuncao(dom.data, f.id) : "",
+      }))
+      .filter((l) => l.vSab || l.vDom);
+    if (linhasFuncao.length === 0) return null;
+    const multiplas = funcoesAplicaveis.length > 1;
+
+    return (
+      <div className="flex flex-col gap-1.5">
+        {linhasFuncao.map(({ f, vSab, vDom }) => (
+          <div key={f.id} className="flex flex-col gap-0.5">
+            {multiplas && (
+              <span className="text-[6.5px] font-bold uppercase leading-tight tracking-wide text-ink-400">
+                {emojiFuncao(f.nome)} {f.nome}
+              </span>
+            )}
+            {sab && vSab && <span className="text-[9.5px] font-bold uppercase leading-tight text-ink-900">{vSab}</span>}
+            {dom && vDom && <span className="text-[9.5px] font-bold uppercase leading-tight text-ink-900">{vDom}</span>}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  /** Célula de uma categoria numa linha de quarta-feira — um valor só, sem par sábado/domingo. */
+  function renderCelulaQua(cat: CategoriaDTO, dia: DiaInfo) {
+    const linhasFuncao = cat.funcoes
+      .filter((f) => f.diasSemana.includes(3))
+      .map((f) => ({ f, valor: valorFuncao(dia.data, f.id) }))
+      .filter((l) => l.valor);
+    if (linhasFuncao.length === 0) return null;
+    const multiplas = linhasFuncao.length > 1;
+
+    return (
+      <div className="flex flex-col gap-1">
+        {linhasFuncao.map(({ f, valor }) => (
+          <div key={f.id} className="flex items-baseline gap-1">
+            {multiplas && (
+              <span className="text-[6.5px] font-bold uppercase leading-tight text-ink-400">{emojiFuncao(f.nome)}</span>
+            )}
+            <span className="text-[9.5px] font-bold uppercase leading-tight text-ink-900">{valor}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  /** Observação + atividades das datas de uma linha, numa faixa fininha embaixo da linha (não entra nas colunas). */
+  function renderNotasLinha(datas: (string | null)[]) {
+    const partes: { chave: string; texto: string }[] = [];
+    for (const data of datas) {
+      if (!data) continue;
+      const ministerio = ministeriosResponsaveis[data];
+      if (ministerio) partes.push({ chave: `min-${data}`, texto: `🏛️ ${ministerio}` });
+      const nota = (observacoes[data] ?? "").trim();
+      if (nota) partes.push({ chave: `nota-${data}`, texto: `📝 ${nota}` });
+      if (incluirAtividadesExport) {
+        for (const a of atividades[data] ?? []) {
+          partes.push({
+            chave: a.id,
+            texto: `🎉 ${a.horario ? `${a.horario} ` : ""}${a.titulo}${a.ministerio ? ` · ${a.ministerio}` : ""}`,
+          });
+        }
+      }
+    }
+    if (partes.length === 0) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-dashed border-ink-900/15 px-2.5 py-1 text-[7.5px] italic text-ink-600">
+        {partes.map((p) => (
+          <span key={p.chave}>{p.texto}</span>
+        ))}
+      </div>
+    );
+  }
+
+  const CORES_FAIXA = [
+    "bg-brand-50",
+    "bg-orange-50",
+    "bg-[var(--color-pdfband-purple)]",
+    "bg-green-50",
+  ];
+
+  /** Linha de cabeçalho — uma pílula por categoria, alinhada com as colunas das linhas abaixo. */
+  function renderCabecalhoTabela(cats: CategoriaDTO[]) {
+    return (
+      <div
+        className="mb-2 grid items-stretch gap-x-2"
+        style={{ gridTemplateColumns: `62px 62px repeat(${cats.length}, minmax(0,1fr))` }}
+      >
+        <div />
+        <div />
+        {cats.map((cat) => (
+          <div
+            key={cat.id}
+            className="flex items-center justify-center rounded-full bg-gradient-to-r from-pdfblue to-pdforange px-2 py-1.5 text-center"
+          >
+            <span className="font-heading text-[9px] font-extrabold uppercase leading-tight tracking-wide text-white">
+              {emojiMinisterio(cat.nome)} {cat.nome}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  /** Uma linha completa da tabela (fim de semana ou quarta), com a faixa de cor e as notas embaixo. */
+  function renderLinhaTabela(linha: LinhaTabela, cats: CategoriaDTO[], cor: string) {
+    const chave = linha.tipo === "fds" ? (linha.sab ?? linha.dom)!.data : linha.dia.data;
+    const datasDaLinha = linha.tipo === "fds" ? [linha.sab?.data ?? null, linha.dom?.data ?? null] : [linha.dia.data];
+
+    return (
+      <div key={chave} className={"mb-2 break-inside-avoid rounded-xl " + cor}>
+        <div
+          className="grid items-center gap-x-2 px-2 py-2"
+          style={{ gridTemplateColumns: `62px 62px repeat(${cats.length}, minmax(0,1fr))` }}
+        >
+          {linha.tipo === "fds" ? (
+            <>
+              <div className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-1 py-1.5">
+                {linha.sab && (
+                  <>
+                    <span className="text-[7px] font-bold uppercase text-ink-600">Sábado</span>
+                    <span className="font-heading text-[17px] font-extrabold leading-none text-ink-900">
+                      {String(linha.sab.dia).padStart(2, "0")}
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-1 py-1.5">
+                {linha.dom && (
+                  <>
+                    <span className="text-[7px] font-bold uppercase text-ink-600">Domingo</span>
+                    <span className="font-heading text-[17px] font-extrabold leading-none text-ink-900">
+                      {String(linha.dom.dia).padStart(2, "0")}
+                    </span>
+                  </>
+                )}
+              </div>
+              {cats.map((cat) => (
+                <div key={cat.id} className="flex items-center justify-center text-center">
+                  {renderCelulaFds(cat, linha.sab, linha.dom)}
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <div
+                style={{ gridColumn: "1 / span 2" }}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-white/70 px-1 py-1.5"
+              >
+                <span className="text-[8px] font-bold uppercase text-ink-600">4ª feira</span>
+                <span className="font-heading text-[17px] font-extrabold leading-none text-ink-900">
+                  {String(linha.dia.dia).padStart(2, "0")}
+                </span>
+              </div>
+              {cats.map((cat) => (
+                <div key={cat.id} className="flex items-center justify-center text-center">
+                  {renderCelulaQua(cat, linha.dia)}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        {renderNotasLinha(datasDaLinha)}
+      </div>
+    );
+  }
+
+  /** Monta a tabela inteira (cabeçalho + linhas, cor alternando a cada fim de semana) pras linhas dadas. */
+  function renderTabelaProgramacao(linhas: LinhaTabela[]) {
+    const cats = categoriasTabela();
+    let corIndex = -1;
+    return (
+      <div>
+        {renderCabecalhoTabela(cats)}
+        {linhas.map((linha) => {
+          if (linha.tipo === "fds" || corIndex === -1) corIndex = (corIndex + 1) % CORES_FAIXA.length;
+          return renderLinhaTabela(linha, cats, CORES_FAIXA[corIndex]);
+        })}
+      </div>
+    );
+  }
+
   /**
    * Conteúdo do PDF — usado tanto no bloco escondido que vira a impressão
    * real quanto dentro do modal de pré-visualização. É a MESMA função
@@ -716,75 +827,25 @@ export default function EscalaBoard({
    */
   function renderPrintContent() {
     if (!printTarget) return null;
+    const linhas = printTarget === "mes" ? construirLinhasTabela() : [linhaParaAlvo(printTarget)];
 
-    if (printTarget === "mes") {
-      return (
-        <div>
-          <div className="mb-6 flex items-center gap-4 rounded-2xl bg-pdfblue px-5 py-4">
-            <img src="/logo-icon.png" alt="" className="h-12 w-12 flex-none rounded-full ring-2 ring-white/40" />
-            <div className="flex flex-col">
-              <span className="font-heading text-[10px] font-bold uppercase tracking-[0.3em] text-orange-200">
-                Promessa Vila Camargo
-              </span>
-              <span className="font-heading text-[22px] font-extrabold uppercase tracking-wide text-white">
-                Programação de Cultos
-              </span>
-              <span className="text-[12px] font-semibold text-white/80">
-                {nomeMes(mes)} {ano}
-              </span>
-            </div>
-          </div>
-          <div className="columns-2 gap-5">{diasDoMes.map((d) => renderDiaPdfCard(d, false))}</div>
-          <div className="mt-6 border-t border-pdfgray pt-3 text-center text-[10px] text-ink-400">
-            Programação de Cultos · Promessa Vila Camargo · gerado em {new Date().toLocaleDateString("pt-BR")}
-          </div>
-        </div>
-      );
-    }
-
-    const par = encontrarParDeFds(printTarget);
     return (
       <div>
-        <div className="mb-7 flex items-center gap-4 rounded-2xl bg-pdfblue px-6 py-5">
-          <img src="/logo-icon.png" alt="" className="h-14 w-14 flex-none rounded-full ring-2 ring-white/40" />
+        <div className="mb-5 flex items-center gap-4 border-b-4 border-pdfblue pb-3">
           <div className="flex flex-col">
-            <span className="font-heading text-[10px] font-bold uppercase tracking-[0.3em] text-orange-200">
+            <span className="font-heading text-[10px] font-bold uppercase tracking-[0.3em] text-pdforange">
               Promessa Vila Camargo
             </span>
-            <span className="font-heading text-[24px] font-extrabold uppercase tracking-wide text-white">
-              Programação de Cultos
+            <span className="font-heading text-[22px] font-extrabold uppercase tracking-wide text-pdfblue">
+              Programação de Cultos — {nomeMes(mes)} {ano}
             </span>
           </div>
-          <div className="ml-auto text-right text-white">
-            {par ? (
-              <>
-                <div className="text-[10px] font-bold uppercase tracking-wide text-orange-200">Fim de semana</div>
-                <div className="font-heading text-lg font-extrabold">
-                  {fmtDDMM(ano, mes, par.sab.dia)} – {fmtDDMM(ano, mes, par.dom.dia)}/{ano}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-[10px] font-bold uppercase tracking-wide text-orange-200">Data</div>
-                <div className="font-heading text-lg font-extrabold">
-                  {fmtDDMM(ano, mes, printTarget.dia)}/{ano}
-                </div>
-                <div className="text-[12px] font-semibold text-white/80">{nomeDiaSemana(printTarget.diaSemana)}</div>
-              </>
-            )}
-          </div>
+          <img src="/logo-icon.png" alt="" className="ml-auto h-12 w-12 flex-none rounded-full" />
         </div>
 
-        {par ? (
-          <div className="grid grid-cols-2 gap-x-6">
-            <div>{renderDiaPdfCard(par.sab, true)}</div>
-            <div>{renderDiaPdfCard(par.dom, true)}</div>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-md">{renderDiaPdfCard(printTarget, true)}</div>
-        )}
+        {renderTabelaProgramacao(linhas)}
 
-        <div className="mt-10 border-t border-pdfgray pt-3 text-center text-[10px] text-ink-400">
+        <div className="mt-4 border-t border-pdfgray pt-2 text-center text-[9px] text-ink-400">
           Programação de Cultos · Promessa Vila Camargo · gerado em {new Date().toLocaleDateString("pt-BR")}
         </div>
       </div>
@@ -1024,7 +1085,7 @@ export default function EscalaBoard({
               </button>
             </div>
           </div>
-          <div className="mx-auto max-w-[850px] rounded-2xl bg-white p-6 shadow-soft-lift sm:p-10">
+          <div className="mx-auto max-w-[1150px] rounded-2xl bg-white p-6 shadow-soft-lift sm:p-10">
             {renderPrintContent()}
           </div>
         </div>

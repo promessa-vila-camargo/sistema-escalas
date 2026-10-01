@@ -74,6 +74,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
   const password = String(formData.get("password") ?? "");
   const ativo = formData.get("ativo") === "on";
   const verTudo = formData.get("verTudo") === "on";
+  const podeGerenciarEventoExtra = formData.get("podeGerenciarEventoExtra") === "on";
   const funcaoIds = formData.getAll("funcaoIds").map(String);
 
   if (!nome) return { error: "Escreva o nome da pessoa." };
@@ -90,6 +91,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
         nome: string;
         ativo: boolean;
         verTudo: boolean;
+        podeGerenciarEventoExtra: boolean;
         username?: string | null;
         passwordHash?: string;
         funcoes: { deleteMany: Record<string, never>; create: { funcaoId: string }[] };
@@ -97,6 +99,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
         nome,
         ativo,
         verTudo,
+        podeGerenciarEventoExtra,
         username: usernameRaw || null,
         funcoes: { deleteMany: {}, create: funcaoIds.map((funcaoId) => ({ funcaoId })) },
       };
@@ -111,6 +114,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
           passwordHash: password ? await bcrypt.hash(password, 10) : null,
           ativo,
           verTudo,
+          podeGerenciarEventoExtra,
           role: "VOLUNTARIO",
           funcoes: { create: funcaoIds.map((funcaoId) => ({ funcaoId })) },
         },

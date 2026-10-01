@@ -12,6 +12,7 @@ type Pessoa = {
   username: string | null;
   ativo: boolean;
   verTudo: boolean;
+  podeGerenciarEventoExtra: boolean;
   funcaoIds: string[];
 };
 
@@ -90,6 +91,21 @@ function PessoaForm({
             );
           })}
         </div>
+      </div>
+
+      <div>
+        <span className="mb-2 block text-[10.5px] font-bold uppercase tracking-wide text-ink-400">
+          Permissões adicionais
+        </span>
+        <label className="flex items-center gap-2 text-[13px] font-medium text-ink-900">
+          <input
+            type="checkbox"
+            name="podeGerenciarEventoExtra"
+            defaultChecked={editando?.podeGerenciarEventoExtra ?? false}
+            className="h-4 w-4 accent-orange-600"
+          />
+          🟠 Pode criar/editar/excluir escalas extraordinárias
+        </label>
       </div>
 
       <div>
@@ -208,6 +224,9 @@ export default function PessoasManager({ categorias, pessoas }: { categorias: Ca
                   {n}
                 </span>
               ))}
+              {p.podeGerenciarEventoExtra && (
+                <span className="badge-neutral !bg-orange-100 !text-orange-700">🟠 Escalas extraordinárias</span>
+              )}
             </div>
             <span className={p.ativo ? "badge-positive" : "badge-negative"}>{p.ativo ? "Ativo" : "Inativo"}</span>
             <button type="button" className="link" onClick={() => setEditandoId(p.id)}>

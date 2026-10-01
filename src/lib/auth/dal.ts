@@ -11,6 +11,7 @@ export type CurrentUser = {
   role: "ADMIN" | "VOLUNTARIO";
   funcaoIds: string[];
   verTudo: boolean;
+  podeGerenciarEventoExtra: boolean;
 };
 
 /**
@@ -41,6 +42,7 @@ export const verifySession = cache(async (): Promise<CurrentUser> => {
     role: user.role,
     funcaoIds: user.funcoes.map((f) => f.funcaoId),
     verTudo: user.verTudo,
+    podeGerenciarEventoExtra: user.podeGerenciarEventoExtra,
   };
 });
 

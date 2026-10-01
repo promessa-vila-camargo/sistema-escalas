@@ -34,6 +34,7 @@ export default function EventosExtra({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const isAdmin = currentUser.role === "ADMIN";
+  const podeGerenciar = isAdmin || currentUser.podeGerenciarEventoExtra;
   const podeVerTudo = isAdmin || currentUser.verTudo;
   const categoriasVisiveis = podeVerTudo
     ? categorias
@@ -131,7 +132,7 @@ export default function EventosExtra({
           <span className="badge-neutral !bg-orange-100 !text-orange-700">🟠 Escalas extraordinárias</span>
           <p className="mt-1 text-[12px] text-ink-600">Eventos fora do horário oficial — não afetam a escala normal.</p>
         </div>
-        {isAdmin && (
+        {podeGerenciar && (
           <div className="no-print flex gap-2">
             <button type="button" onClick={() => abrirModalRapido("sabado_noite")} className="btn-secondary">
               🌙 Culto de sábado à noite
@@ -168,7 +169,7 @@ export default function EventosExtra({
                   >
                     🖨️
                   </button>
-                  {isAdmin && (
+                  {podeGerenciar && (
                     <button
                       type="button"
                       title="Excluir"

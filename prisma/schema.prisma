@@ -22,6 +22,10 @@ model User {
   /// Voluntário com verTudo=true enxerga a escala inteira (como o admin),
   /// mas só edita as próprias funções — default é ver só o que é dele.
   verTudo      Boolean  @default(false)
+  /// Delega a gestão das escalas extraordinárias (criar/editar/excluir
+  /// eventos) pra esse login sem precisar ser ADMIN — preencher função
+  /// individual dentro de um evento já segue a permissão normal (funcoes).
+  podeGerenciarEventoExtra Boolean @default(false)
   createdAt    DateTime @default(now())
 
   funcoes     UserFuncao[]

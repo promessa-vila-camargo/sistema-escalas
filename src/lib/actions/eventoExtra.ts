@@ -2,11 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { verifyAdmin, verifySession } from "@/lib/auth/dal";
+import { verifySession } from "@/lib/auth/dal";
 
 function refreshEventosExtraPages() {
   revalidatePath("/admin/escala");
   revalidatePath("/escala");
+}
+
+/** Admin sempre pode; um voluntário com podeGerenciarEventoExtra=true também, sem precisar virar admin. */
+async function verifyGerenciaEventoExtra() {
+  const me = await verifySession();
+  if (me.role !== "ADMIN" && !me.podeGerenciarEventoExtra) {
+    throw new Error("Você não tem permissão para gerenciar escalas extraordinárias.");
+  }
+  return me;
 }
 
 export type EventoExtraDTO = {
@@ -32,7 +41,7 @@ export async function buscarEventosExtra(): Promise<EventoExtraDTO[]> {
 }
 
 export async function criarEventoExtra(nome: string, data: string, horario: string) {
-  await verifyAdmin();
+  await verifyGerenciaEventoExtra();
   const nomeLimpo = nome.trim().toUpperCase();
   if (!nomeLimpo) throw new Error("Escreva um nome pra essa escala extraordinária.");
   if (!data) throw new Error("Escolha uma data.");
@@ -46,7 +55,7 @@ export async function criarEventoExtra(nome: string, data: string, horario: stri
 }
 
 export async function excluirEventoExtra(id: string) {
-  await verifyAdmin();
+  await verifyGerenciaEventoExtra();
   await prisma.eventoExtra.delete({ where: { id } });
   refreshEventosExtraPages();
 }

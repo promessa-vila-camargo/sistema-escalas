@@ -41,6 +41,9 @@
   --color-pdfblue: #004b83;
   --color-pdforange: #e18800;
   --color-pdfgray: #f2f4f7;
+  /* Faixas pastel que alternam por semana na tabela de programação (azul, laranja, roxo, verde — ciclo de 4). */
+  --color-pdfband-purple: #ede4f7;
+  --color-pdfband-purple-line: #c9b3e6;
 
   --color-red-50: #fbeae7;
   --color-red-500: #b5473a;
@@ -157,7 +160,7 @@ h3 {
   }
 
   @page {
-    size: A4;
-    margin: 12mm;
+    size: A4 landscape;
+    margin: 10mm;
   }
 }
