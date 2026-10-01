@@ -48,9 +48,10 @@ model Funcao {
   categoriaId String
   diasSemana  Int[]  @default([0, 3, 6])
 
-  categoria   Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
-  usuarios    UserFuncao[]
-  atribuicoes Atribuicao[]
+  categoria        Categoria               @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  usuarios         UserFuncao[]
+  atribuicoes      Atribuicao[]
+  atribuicoesExtra EventoExtraAtribuicao[]
 }
 
 /** Uma linha por (pessoa, função que ela está habilitada a exercer). */
@@ -72,31 +73,58 @@ model UserFuncao {
  * lido pela UI) apenas para não descartar histórico de quem logou e se
  * autoescalou antes dessa mudança; novas escritas não o usam mais.
  */
-/** turno: "DIA" (culto normal) ou "NOITE" (evento extra à noite, mesmo dia). */
 model Atribuicao {
   id            String   @id @default(cuid())
   data          DateTime @db.Date
   funcaoId      String
   userId        String?
   nomeEscalado  String?
-  turno         String   @default("DIA")
 
   funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@unique([data, funcaoId, turno])
+  @@unique([data, funcaoId])
 }
 
 /**
- * Observação livre por culto (ex.: "também teremos culto à noite às 19h"),
- * a flag "tem evento à noite" e o ministério/departamento responsável por
- * organizar aquele culto (só faz sentido sábado/domingo) — só o admin
- * escreve, todo mundo que vê aquele dia lê.
+ * Observação livre por culto (ex.: "também teremos culto à noite às 19h") e
+ * o ministério/departamento responsável por organizar aquele culto (só faz
+ * sentido sábado/domingo) — só o admin escreve, todo mundo que vê aquele dia
+ * lê.
  */
 model CultoNota {
   id                    String   @id @default(cuid())
   data                  DateTime @unique @db.Date
   texto                 String?
-  temEventoNoite        Boolean  @default(false)
   ministerioResponsavel String?
+}
+
+/**
+ * Escala extraordinária: um evento avulso fora da grade semanal oficial
+ * (ex.: "CULTO DE SÁBADO À NOITE"), com data e horário próprios — não altera
+ * nem depende dos cultos oficiais. Hoje usado só por Mídia/Datashow/
+ * Transmissão/Som (ver CATEGORIAS_ESCALA_EXTRAORDINARIA em lib/datas.ts),
+ * mas a estrutura não impõe essa restrição — é só a UI que filtra.
+ */
+model EventoExtra {
+  id        String   @id @default(cuid())
+  nome      String
+  data      DateTime @db.Date
+  horario   String
+  createdAt DateTime @default(now())
+
+  atribuicoes EventoExtraAtribuicao[]
+}
+
+/** Uma linha por (evento extraordinário, função preenchida nele) — mesma ideia de Atribuicao, mas pro EventoExtra. */
+model EventoExtraAtribuicao {
+  id           String  @id @default(cuid())
+  eventoId     String
+  funcaoId     String
+  nomeEscalado String?
+
+  evento EventoExtra @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  funcao Funcao      @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+
+  @@unique([eventoId, funcaoId])
 }

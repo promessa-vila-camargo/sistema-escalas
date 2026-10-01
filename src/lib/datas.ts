@@ -22,11 +22,6 @@ export function parseIsoDate(iso: string) {
   return { y, m: m - 1, d };
 }
 
-/** Chave do evento noturno no AtribuicaoMap: mesma data, sufixo "|noite" — nunca é passada pra Date(). */
-export function chaveNoite(data: string) {
-  return `${data}|noite`;
-}
-
 /**
  * Funções em que sábado e domingo são pessoas diferentes por natureza —
  * escalar no sábado NÃO repete automaticamente no domingo (diferente das
@@ -77,3 +72,21 @@ export function nomeDiaSemana(diaSemana: number) {
 }
 
 export const MESES_LISTA = MESES;
+
+/** Categorias que podem ter escalas extraordinárias (fora do horário oficial). */
+export const CATEGORIAS_ESCALA_EXTRAORDINARIA = ["Mídia", "Datashow", "Transmissão", "Som"];
+
+/** Formata uma data livre "YYYY-MM-DD" como "sábado, 04/10/2026" — pro cabeçalho de uma escala extraordinária. */
+export function fmtDataCompleta(iso: string) {
+  const { y, m, d } = parseIsoDate(iso);
+  const diaSemana = new Date(y, m, d).getDay();
+  return `${nomeDiaSemana(diaSemana)}, ${fmtDDMM(y, m, d)}/${y}`;
+}
+
+/** Próximo sábado a partir de hoje (incluindo hoje, se hoje já for sábado), como "YYYY-MM-DD". */
+export function proximoSabado() {
+  const hoje = new Date();
+  const diasAteSabado = (6 - hoje.getDay() + 7) % 7;
+  const alvo = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + diasAteSabado);
+  return isoDate(alvo.getFullYear(), alvo.getMonth(), alvo.getDate());
+}

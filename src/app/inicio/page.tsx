@@ -4,21 +4,10 @@ import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
 import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM } from "@/lib/datas";
+import { emojiMinisterio } from "@/lib/emojis";
 import TopNav from "@/components/TopNav";
 
 export const metadata = { title: "Início" };
-
-const EMOJI_MINISTERIO: Record<string, string> = {
-  "Direção": "⛪",
-  "Palavra e Pregação": "🎤",
-  "Mídia": "📱",
-  "Datashow": "💻",
-  "Transmissão": "🖥️",
-  "Som": "🎚️",
-};
-function emojiMinisterio(nome: string) {
-  return EMOJI_MINISTERIO[nome] ?? "🏛️";
-}
 
 export default async function InicioPage() {
   const user = await verifySession();

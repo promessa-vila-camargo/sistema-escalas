@@ -1,9 +1,11 @@
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes, buscarObservacoes, buscarEventosNoite, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
-import { isoDate } from "@/lib/datas";
+import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
+import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
+import { isoDate, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
+import EventosExtra from "@/components/EventosExtra";
 
 export const metadata = { title: "Escala | Admin" };
 
@@ -33,10 +35,11 @@ export default async function AdminEscalaPage({
   const ultimoDia = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
   const atribuicoes = await buscarAtribuicoes(primeiroDia, ultimoDia);
   const observacoes = await buscarObservacoes(primeiroDia, ultimoDia);
-  const eventosNoite = await buscarEventosNoite(primeiroDia, ultimoDia);
   const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(primeiroDia, ultimoDia);
+  const eventosExtra = await buscarEventosExtra();
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
+  const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
 
   return (
     <div>
@@ -44,17 +47,20 @@ export default async function AdminEscalaPage({
         <h1 className="font-heading text-xl font-extrabold text-ink-900">Escala</h1>
         <MonthYearPicker ano={ano} mes={mes} basePath="/admin/escala" />
       </div>
+      <div className="mb-3">
+        <span className="badge-positive">🟢 Escala oficial</span>
+      </div>
       <EscalaBoard
         ano={ano}
         mes={mes}
         categorias={categorias}
         atribuicoesIniciais={atribuicoes}
         observacoesIniciais={observacoes}
-        eventosNoiteIniciais={eventosNoite}
         ministeriosResponsaveisIniciais={ministeriosResponsaveis}
         currentUser={user}
         showExport
       />
+      <EventosExtra categorias={categoriasExtraordinaria} eventosIniciais={eventosExtra} currentUser={user} />
     </div>
   );
 }
