@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { definirAtribuicao, definirObservacao, definirEventoNoite, definirMinisterioResponsavel, type Turno } from "@/lib/actions/escala";
 import {
   buildMonthDays,
@@ -40,6 +40,36 @@ function emojiMinisterio(nome: string) {
 }
 function emojiFuncao(nome: string) {
   return EMOJI_FUNCAO[nome] ?? "•";
+}
+
+/** Checkbox grande com suporte a estado "indeterminado" (parte das funções da categoria selecionada) — só dá pra setar via DOM, não como prop do React. */
+function CheckboxTriState({
+  checked,
+  indeterminate,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <label className="flex cursor-pointer select-none items-center gap-2.5 py-0.5">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-5 w-5 flex-none accent-orange-600"
+      />
+      <span className="text-[13px] font-medium text-ink-900">{label}</span>
+    </label>
+  );
 }
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
@@ -91,6 +121,10 @@ export default function EscalaBoard({
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [salvandoTudo, setSalvandoTudo] = useState(false);
+  const [modalExportAlvo, setModalExportAlvo] = useState<PrintTarget | null>(null);
+  const [selecaoExport, setSelecaoExport] = useState<Record<string, boolean>>({});
+  const [categoriasExpandidas, setCategoriasExpandidas] = useState<Record<string, boolean>>({});
+  const [erroSelecaoExport, setErroSelecaoExport] = useState<string | null>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,6 +153,52 @@ export default function EscalaBoard({
   }, [dias]);
   const isAdmin = currentUser.role === "ADMIN";
   const temAlgumaFuncao = categorias.some((c) => c.funcoes.length > 0);
+
+  /** Todas as funções do sistema (pro "Selecionar todas"/"Limpar seleção" do modal de exportação). */
+  const todasFuncaoIdsExport = useMemo(() => categorias.flatMap((c) => c.funcoes.map((f) => f.id)), [categorias]);
+
+  /** Selecionada por padrão até o usuário mexer no modal — não existe uma "seleção anterior" persistida. */
+  function isSelecionadaExport(funcaoId: string) {
+    return selecaoExport[funcaoId] ?? true;
+  }
+
+  /** "checked" (todas as funções marcadas), "unchecked" (nenhuma) ou "indeterminate" (só algumas) — pro checkbox da categoria no modal de exportação. */
+  function estadoCategoriaExport(cat: CategoriaDTO): "checked" | "unchecked" | "indeterminate" {
+    if (cat.funcoes.length === 0) return "unchecked";
+    const marcadas = cat.funcoes.filter((f) => isSelecionadaExport(f.id)).length;
+    if (marcadas === cat.funcoes.length) return "checked";
+    if (marcadas === 0) return "unchecked";
+    return "indeterminate";
+  }
+
+  /** Clicar na categoria (fora do indeterminado) alterna todas as funções dela de uma vez; no indeterminado, marca todas. */
+  function toggleCategoriaExport(cat: CategoriaDTO) {
+    const marcarTudo = estadoCategoriaExport(cat) !== "checked";
+    setSelecaoExport((old) => {
+      const next = { ...old };
+      for (const f of cat.funcoes) next[f.id] = marcarTudo;
+      return next;
+    });
+    setErroSelecaoExport(null);
+  }
+
+  function toggleFuncaoExport(funcaoId: string) {
+    setSelecaoExport((old) => ({ ...old, [funcaoId]: !isSelecionadaExport(funcaoId) }));
+    setErroSelecaoExport(null);
+  }
+
+  function selecionarTodasExport() {
+    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, true])));
+    setErroSelecaoExport(null);
+  }
+
+  function limparSelecaoExport() {
+    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, false])));
+  }
+
+  function toggleCategoriaExpandida(catId: string) {
+    setCategoriasExpandidas((old) => ({ ...old, [catId]: !(old[catId] ?? true) }));
+  }
 
   /**
    * "Ver apenas minha responsabilidade" (padrão): só aparece o que foi
@@ -316,7 +396,7 @@ export default function EscalaBoard({
             <button
               type="button"
               title="Gerar PDF desta escala"
-              onClick={() => handleExportClick({ data, dia, diaSemana })}
+              onClick={() => handleAbrirModalExport({ data, dia, diaSemana })}
               className="flex-none rounded-md p-1 text-[15px] text-ink-400 hover:bg-brand-50 hover:text-orange-600"
             >
               🖨️
@@ -486,6 +566,25 @@ export default function EscalaBoard({
     ? diasDoMes.filter((d) => missingList(d.data, d.diaSemana).length === 0).length
     : 0;
 
+  /** Abre o modal "Selecionar conteúdo da escala" — a exportação de verdade só começa depois de confirmar lá. Seleção sempre começa com tudo marcado, nunca herda a de uma exportação anterior. */
+  function handleAbrirModalExport(alvo: PrintTarget) {
+    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, true])));
+    setCategoriasExpandidas({});
+    setErroSelecaoExport(null);
+    setModalExportAlvo(alvo);
+  }
+
+  function handleConfirmarSelecaoExport() {
+    const temAlgumaSelecionada = todasFuncaoIdsExport.some((id) => isSelecionadaExport(id));
+    if (!temAlgumaSelecionada) {
+      setErroSelecaoExport("Selecione pelo menos uma área para gerar a escala.");
+      return;
+    }
+    const alvo = modalExportAlvo;
+    setModalExportAlvo(null);
+    if (alvo) handleExportClick(alvo);
+  }
+
   function handleExportClick(alvo: PrintTarget) {
     if (!temAlgumaFuncao) {
       setPrintTarget(alvo);
@@ -494,7 +593,7 @@ export default function EscalaBoard({
     }
     const diasParaChecar = alvo === "mes" ? diasDoMes : [alvo];
     const pendentes = diasParaChecar
-      .map((d) => ({ ...d, faltando: missingList(d.data, d.diaSemana) }))
+      .map((d) => ({ ...d, faltando: missingListExport(d.data, d.diaSemana) }))
       .filter((d) => d.faltando.length > 0);
 
     if (pendentes.length > 0) {
@@ -578,10 +677,25 @@ export default function EscalaBoard({
     );
   }
 
+  /** Usada só na exportação — além do dia da semana, respeita o que foi escolhido no modal "Selecionar conteúdo da escala". */
   function categoriasDoDiaCompleto(diaSemana: number) {
     return categorias
-      .map((c) => ({ ...c, funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana)) }))
+      .map((c) => ({
+        ...c,
+        funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana) && isSelecionadaExport(f.id)),
+      }))
       .filter((c) => c.funcoes.length > 0);
+  }
+
+  /** Mesma ideia de missingList, mas só considera o que foi selecionado pra exportar (pra não avisar de função que o usuário excluiu de propósito). */
+  function missingListExport(data: string, diaSemana: number) {
+    const out: string[] = [];
+    for (const cat of categoriasDoDiaCompleto(diaSemana)) {
+      for (const f of cat.funcoes) {
+        if (!atribuicoes[data]?.[f.id]?.trim()) out.push(f.nome);
+      }
+    }
+    return out;
   }
 
   /** Bloco compacto (PDF do mês inteiro — muitos cultos na mesma folha). */
@@ -721,11 +835,90 @@ export default function EscalaBoard({
           </button>
         )}
         {showExport && (
-          <button type="button" onClick={() => handleExportClick("mes")} className="btn-primary">
+          <button type="button" onClick={() => handleAbrirModalExport("mes")} className="btn-primary">
             📄 Exportar PDF do mês
           </button>
         )}
       </div>
+
+      {modalExportAlvo && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-5">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lift">
+            <div className="border-b border-brand-100 px-6 py-4">
+              <h3 className="font-heading text-base font-extrabold text-ink-900">Selecionar conteúdo da escala</h3>
+              <p className="mt-0.5 text-[12px] text-ink-600">
+                Escolha o que vai aparecer neste PDF — isso não muda a escala, só o que é exportado.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 border-b border-brand-100 px-6 py-2.5">
+              <button type="button" onClick={selecionarTodasExport} className="link">
+                Selecionar todas
+              </button>
+              <span className="text-ink-300">·</span>
+              <button type="button" onClick={limparSelecaoExport} className="link">
+                Limpar seleção
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-6 py-3">
+              {categorias.map((cat) => {
+                if (cat.funcoes.length === 0) return null;
+                const estado = estadoCategoriaExport(cat);
+                const expandida = categoriasExpandidas[cat.id] ?? true;
+                return (
+                  <div key={cat.id} className="mb-2.5 rounded-xl border border-brand-100">
+                    <div className="flex items-center gap-1.5 px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleCategoriaExpandida(cat.id)}
+                        className="flex h-6 w-6 flex-none items-center justify-center text-ink-400 hover:text-ink-900"
+                        aria-label={expandida ? "Recolher" : "Expandir"}
+                      >
+                        {expandida ? "▾" : "▸"}
+                      </button>
+                      <CheckboxTriState
+                        checked={estado === "checked"}
+                        indeterminate={estado === "indeterminate"}
+                        onChange={() => toggleCategoriaExport(cat)}
+                        label={`${emojiMinisterio(cat.nome)} ${cat.nome}`}
+                      />
+                    </div>
+                    {expandida && (
+                      <div className="flex flex-col gap-1 border-t border-brand-100 py-2 pl-12 pr-3">
+                        {cat.funcoes.map((f) => (
+                          <CheckboxTriState
+                            key={f.id}
+                            checked={isSelecionadaExport(f.id)}
+                            indeterminate={false}
+                            onChange={() => toggleFuncaoExport(f.id)}
+                            label={`${emojiFuncao(f.nome)} ${f.nome}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {erroSelecaoExport && (
+              <p className="border-t border-brand-100 px-6 py-2.5 text-[12.5px] font-medium text-red-600">
+                {erroSelecaoExport}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-brand-100 px-6 py-4">
+              <button type="button" className="btn-ghost" onClick={() => setModalExportAlvo(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-primary" onClick={handleConfirmarSelecaoExport}>
+                GERAR PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="no-print fixed bottom-5 right-5 z-50 rounded-xl bg-ink-900 px-4 py-3 text-sm font-semibold text-white shadow-soft-lift">
