@@ -12,6 +12,13 @@ enum Role {
   VOLUNTARIO
 }
 
+/// Status de confirmação de uma escala pelo próprio escalado — ver Atribuicao.
+enum StatusConfirmacao {
+  AGUARDANDO
+  CONFIRMADO
+  TROCA_SOLICITADA
+}
+
 model User {
   id           String   @id @default(cuid())
   nome         String
@@ -72,17 +79,29 @@ model UserFuncao {
 
 /**
  * Uma linha por (data do culto, função) — existe sempre que alguém preenche
- * aquela função naquele culto. O escalado é texto livre (nomeEscalado):
- * não exige cadastro prévio da pessoa. userId fica preservado (não é mais
- * lido pela UI) apenas para não descartar histórico de quem logou e se
- * autoescalou antes dessa mudança; novas escritas não o usam mais.
+ * aquela função naquele culto. O escalado é texto livre (nomeEscalado): não
+ * exige cadastro prévio da pessoa. Quando o texto digitado bate (sem diferenciar
+ * maiúsculas/minúsculas) com o nome de um login cadastrado, userId é
+ * preenchido automaticamente — é isso que liga essa linha à tela de
+ * confirmação ("minhas escalas") daquela pessoa. Sem correspondência, userId
+ * fica null e a linha continua funcionando normalmente, só sem confirmação.
+ *
+ * status/confirmadoEm/trocaObservacao/trocaSolicitadaEm só fazem sentido
+ * quando userId existe. Qualquer edição do nome/função dessa linha depois de
+ * confirmada ou com troca solicitada volta status pra AGUARDANDO (sem apagar
+ * os timestamps antigos — é como a tela sabe que precisa avisar "atualizada,
+ * confirme de novo" em vez de tratar como primeira vez).
  */
 model Atribuicao {
-  id            String   @id @default(cuid())
-  data          DateTime @db.Date
-  funcaoId      String
-  userId        String?
-  nomeEscalado  String?
+  id                 String            @id @default(cuid())
+  data               DateTime          @db.Date
+  funcaoId           String
+  userId             String?
+  nomeEscalado       String?
+  status             StatusConfirmacao @default(AGUARDANDO)
+  confirmadoEm       DateTime?
+  trocaObservacao    String?
+  trocaSolicitadaEm  DateTime?
 
   funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)

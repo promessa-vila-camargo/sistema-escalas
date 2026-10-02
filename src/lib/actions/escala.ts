@@ -38,18 +38,50 @@ export async function definirAtribuicao(data: string, funcaoId: string, nome: st
 
   revalidatePath("/admin/escala");
   revalidatePath("/escala");
+  revalidatePath("/minhas-escalas");
+  revalidatePath("/admin");
+}
+
+/**
+ * Se o texto digitado bater (sem diferenciar maiúsculas/minúsculas) com o
+ * nome de um login ativo, vincula essa atribuição a ele — é esse vínculo que
+ * liga a linha à tela "minhas escalas" daquela pessoa. Sem correspondência,
+ * fica sem dono (como sempre foi) e continua funcionando normalmente.
+ */
+async function resolverUserId(nomeLimpo: string): Promise<string | null> {
+  const user = await prisma.user.findFirst({
+    where: { nome: { equals: nomeLimpo, mode: "insensitive" }, ativo: true },
+  });
+  return user?.id ?? null;
 }
 
 async function gravar(data: Date, funcaoId: string, nomeLimpo: string | null) {
   if (!nomeLimpo) {
     await prisma.atribuicao.deleteMany({ where: { data, funcaoId } });
-  } else {
-    await prisma.atribuicao.upsert({
-      where: { data_funcaoId: { data, funcaoId } },
-      update: { nomeEscalado: nomeLimpo, userId: null },
-      create: { data, funcaoId, nomeEscalado: nomeLimpo },
-    });
+    return;
   }
+
+  const userId = await resolverUserId(nomeLimpo);
+  const existente = await prisma.atribuicao.findUnique({ where: { data_funcaoId: { data, funcaoId } } });
+
+  // Nome realmente mudou (não é o autosave regravando o mesmo valor) e já
+  // tinha sido confirmada/pedida troca — volta pra "aguardando": uma
+  // confirmação antiga nunca vale pra uma escala que o admin alterou depois.
+  // Os timestamps antigos (confirmadoEm/trocaSolicitadaEm) ficam registrados
+  // de propósito — é como a tela sabe mostrar "atualizada, confirme de novo"
+  // em vez de tratar como se fosse a primeira vez.
+  const precisaResetarStatus =
+    existente && existente.nomeEscalado !== nomeLimpo && existente.status !== "AGUARDANDO";
+
+  await prisma.atribuicao.upsert({
+    where: { data_funcaoId: { data, funcaoId } },
+    update: {
+      nomeEscalado: nomeLimpo,
+      userId,
+      ...(precisaResetarStatus ? { status: "AGUARDANDO" as const } : {}),
+    },
+    create: { data, funcaoId, nomeEscalado: nomeLimpo, userId },
+  });
 }
 
 export type AtribuicaoMap = Record<string, Record<string, string | null>>; // data -> funcaoId -> nomeEscalado

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { buscarAtribuicoes, buscarObservacoes } from "@/lib/actions/escala";
+import { buscarTrocasPendentes } from "@/lib/actions/confirmacao";
 import { isoDate, parseIsoDate, buildMonthDaysFlat, nomeDiaSemana, nomeMes, fmtDDMM, labelFuncao } from "@/lib/datas";
 import { emojiMinisterio } from "@/lib/emojis";
 
@@ -25,6 +26,7 @@ export default async function AdminHomePage() {
   const proxima = candidatos.find((c) => c.data >= hojeIso) ?? null;
 
   const totalPessoas = await prisma.user.count({ where: { role: "VOLUNTARIO", ativo: true } });
+  const trocasPendentes = await buscarTrocasPendentes();
 
   let anoP = hoje.getFullYear();
   let mesP = hoje.getMonth();
@@ -150,6 +152,37 @@ export default async function AdminHomePage() {
           </>
         )}
       </div>
+
+      {trocasPendentes.length > 0 && (
+        <div className="card">
+          <h2 className="mb-3 flex items-center gap-2 text-[13px] font-extrabold uppercase tracking-wide text-ink-600">
+            🔄 Pedidos de troca
+            <span className="badge-negative !bg-red-50 !text-red-600">{trocasPendentes.length} pendente(s)</span>
+          </h2>
+          <div className="flex flex-col gap-2">
+            {trocasPendentes.map((t) => {
+              const { y, m, d } = parseIsoDate(t.data);
+              return (
+                <div key={t.id} className="rounded-lg border border-red-50 bg-red-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] font-bold text-ink-900">
+                      {nomeDiaSemana(t.diaSemana)}, {fmtDDMM(y, m, d)} — {emojiMinisterio(t.categoriaNome)}{" "}
+                      {labelFuncao(t.funcaoNome, t.diaSemana)}
+                    </span>
+                    <Link href={`/admin/escala?ano=${y}&mes=${m}`} className="link whitespace-nowrap">
+                      Resolver →
+                    </Link>
+                  </div>
+                  <div className="mt-1 text-[12.5px] text-ink-600">Escalado(a): {t.nomeEscalado ?? "—"}</div>
+                  {t.observacao && (
+                    <div className="mt-1 text-[12.5px] italic text-ink-400">📝 {t.observacao}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card p-4 sm:p-5">

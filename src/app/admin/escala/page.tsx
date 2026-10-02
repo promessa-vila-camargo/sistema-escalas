@@ -48,6 +48,9 @@ export default async function AdminEscalaPage({
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
 
+  const pessoasRaw = await prisma.user.findMany({ where: { ativo: true }, select: { nome: true }, orderBy: { nome: "asc" } });
+  const pessoasCadastradas = pessoasRaw.map((p) => p.nome);
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
@@ -67,6 +70,7 @@ export default async function AdminEscalaPage({
         atividadesIniciais={atividades}
         currentUser={user}
         showExport
+        pessoasCadastradas={pessoasCadastradas}
       />
       <EventosExtra categorias={categoriasExtraordinaria} eventosIniciais={eventosExtra} currentUser={user} />
     </div>

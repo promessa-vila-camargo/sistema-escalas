@@ -70,6 +70,7 @@ export default function EscalaBoard({
   atividadesIniciais,
   currentUser,
   showExport,
+  pessoasCadastradas,
 }: {
   ano: number;
   mes: number;
@@ -80,6 +81,8 @@ export default function EscalaBoard({
   atividadesIniciais?: Record<string, AtividadeDTO[]>;
   currentUser: CurrentUser;
   showExport?: boolean;
+  /** Nomes dos logins ativos — vira sugestão de autocompletar no campo de texto livre "escalado". Digitar exatamente um desses nomes é o que liga essa atribuição à tela de confirmação da pessoa. */
+  pessoasCadastradas?: string[];
 }) {
   const [atribuicoes, setAtribuicoes] = useState(atribuicoesIniciais);
   const [observacoes, setObservacoes] = useState<ObservacaoMap>(observacoesIniciais ?? {});
@@ -462,6 +465,7 @@ export default function EscalaBoard({
                         value={valor}
                         onChange={(e) => handleTextChange(data, f.id, e.target.value)}
                         onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
+                        list={pessoasCadastradas && pessoasCadastradas.length > 0 ? "pessoas-cadastradas" : undefined}
                         className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold uppercase text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:normal-case placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
                       />
                     ) : (
@@ -864,6 +868,13 @@ export default function EscalaBoard({
 
   return (
     <div>
+      {pessoasCadastradas && pessoasCadastradas.length > 0 && (
+        <datalist id="pessoas-cadastradas">
+          {pessoasCadastradas.map((nome) => (
+            <option key={nome} value={nome} />
+          ))}
+        </datalist>
+      )}
       <div className="no-print mb-4 flex flex-wrap items-center gap-3">
         <div className="mr-auto flex flex-wrap items-center gap-3">
           {saveStatus !== "idle" && (

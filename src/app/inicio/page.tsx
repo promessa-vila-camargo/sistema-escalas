@@ -44,7 +44,14 @@ export default async function InicioPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <TopNav user={user} tabs={[{ href: "/inicio", label: "Início" }, { href: "/escala", label: "Escala" }]} />
+      <TopNav
+        user={user}
+        tabs={[
+          { href: "/inicio", label: "Início" },
+          { href: "/escala", label: "Escala" },
+          { href: "/minhas-escalas", label: "Confirmar escala" },
+        ]}
+      />
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-7">
         <h1 className="mb-1 font-heading text-xl font-extrabold text-ink-900">Olá, {user.nome} 👋</h1>
         <p className="mb-6 text-sm text-ink-600">Aqui está o que você precisa saber sobre sua escala.</p>

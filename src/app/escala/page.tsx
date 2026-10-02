@@ -49,9 +49,19 @@ export default async function EscalaVoluntarioPage({
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
 
+  const pessoasRaw = await prisma.user.findMany({ where: { ativo: true }, select: { nome: true }, orderBy: { nome: "asc" } });
+  const pessoasCadastradas = pessoasRaw.map((p) => p.nome);
+
   return (
     <div className="flex min-h-screen flex-col">
-      <TopNav user={user} tabs={[{ href: "/inicio", label: "Início" }, { href: "/escala", label: "Escala" }]} />
+      <TopNav
+        user={user}
+        tabs={[
+          { href: "/inicio", label: "Início" },
+          { href: "/escala", label: "Escala" },
+          { href: "/minhas-escalas", label: "Confirmar escala" },
+        ]}
+      />
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-7">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -73,6 +83,7 @@ export default async function EscalaVoluntarioPage({
           atividadesIniciais={atividades}
           currentUser={user}
           showExport
+          pessoasCadastradas={pessoasCadastradas}
         />
         <EventosExtra categorias={categoriasExtraordinaria} eventosIniciais={eventosExtra} currentUser={user} />
       </main>
