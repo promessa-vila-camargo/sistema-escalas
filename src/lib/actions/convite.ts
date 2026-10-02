@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { verifyAdmin } from "@/lib/auth/dal";
+import { verifySession } from "@/lib/auth/dal";
 import { caminhoConvite, caminhoConviteMes, conviteMesValido, conviteValido } from "@/lib/convite";
 import { CATEGORIAS_CONFIRMACAO, isoDate } from "@/lib/datas";
 
@@ -20,6 +20,7 @@ function limitesDoMes(mes: string) {
 function revalidarConfirmacoes() {
   revalidatePath("/admin");
   revalidatePath("/admin/confirmacoes");
+  revalidatePath("/confirmacoes");
   revalidatePath("/minhas-escalas");
 }
 
@@ -176,12 +177,14 @@ export type ConviteAdminDTO = ConviteDTO & { caminho: string; caminhoMes: string
 
 /** Painel do admin: uma linha por (pessoa, data) do mês, com o link individual já assinado. */
 export async function buscarConvitesDoMes(ano: number, mes: number): Promise<ConviteAdminDTO[]> {
-  await verifyAdmin();
+  // Não exige ADMIN: quem tem uma área liberada vê as confirmações dessa área (ver CurrentUser.areasConfirmacao).
+  const me = await verifySession();
+  if (me.areasConfirmacao.length === 0) throw new Error("Você não tem permissão para acompanhar confirmações.");
   const primeiro = isoDate(ano, mes, 1);
   const ultimo = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
 
   const linhas = await prisma.atribuicao.findMany({
-    where: { data: { gte: new Date(primeiro), lte: new Date(ultimo) }, nomeEscalado: { not: null }, ...SO_CONFIRMAVEIS },
+    where: { data: { gte: new Date(primeiro), lte: new Date(ultimo) }, nomeEscalado: { not: null }, funcao: { categoria: { nome: { in: me.areasConfirmacao } } } },
     include: { funcao: { include: { categoria: true } } },
     orderBy: [{ data: "asc" }, { funcao: { ordem: "asc" } }],
   });

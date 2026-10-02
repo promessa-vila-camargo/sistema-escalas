@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifyAdmin } from "@/lib/auth/dal";
+import { CATEGORIAS_CONFIRMACAO } from "@/lib/datas";
 
 function refreshPessoasPages() {
   revalidatePath("/admin/pessoas");
@@ -76,6 +77,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
   const verTudo = formData.get("verTudo") === "on";
   const podeGerenciarEventoExtra = formData.get("podeGerenciarEventoExtra") === "on";
   const funcaoIds = formData.getAll("funcaoIds").map(String);
+  const gerenciaConfirmacao = formData.getAll("gerenciaConfirmacao").map(String).filter((a) => CATEGORIAS_CONFIRMACAO.includes(a));
 
   if (!nome) return { error: "Escreva o nome da pessoa." };
   if (usernameRaw && !password && !id) {
@@ -92,6 +94,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
         ativo: boolean;
         verTudo: boolean;
         podeGerenciarEventoExtra: boolean;
+        gerenciaConfirmacao: string[];
         username?: string | null;
         passwordHash?: string;
         funcoes: { deleteMany: Record<string, never>; create: { funcaoId: string }[] };
@@ -100,6 +103,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
         ativo,
         verTudo,
         podeGerenciarEventoExtra,
+        gerenciaConfirmacao,
         username: usernameRaw || null,
         funcoes: { deleteMany: {}, create: funcaoIds.map((funcaoId) => ({ funcaoId })) },
       };
@@ -115,6 +119,7 @@ export async function salvarPessoa(_state: PessoaFormState, formData: FormData):
           ativo,
           verTudo,
           podeGerenciarEventoExtra,
+          gerenciaConfirmacao,
           role: "VOLUNTARIO",
           funcoes: { create: funcaoIds.map((funcaoId) => ({ funcaoId })) },
         },

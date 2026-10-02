@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ConviteAdminDTO, StatusPessoa } from "@/lib/actions/convite";
-import { CATEGORIAS_CONFIRMACAO, fmtDDMM, labelFuncao, parseIsoDate } from "@/lib/datas";
+import { fmtDDMM, labelFuncao, parseIsoDate } from "@/lib/datas";
 import { emojiFuncao, emojiMinisterio } from "@/lib/emojis";
 
 const DIA: Record<number, string> = { 0: "Domingo", 3: "Quarta-feira", 6: "Sábado" };
@@ -30,10 +30,12 @@ function ddmm(iso: string) {
 
 export default function ConfirmacoesPainel({
   convites,
+  areas,
   mesLabel,
   intervaloLabel,
 }: {
   convites: ConviteAdminDTO[];
+  areas: string[];
   mesLabel: string;
   intervaloLabel: string;
 }) {
@@ -54,7 +56,7 @@ export default function ConfirmacoesPainel({
     return [...mapa.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([data, diaSemana]) => ({ data, diaSemana }));
   }, [convites]);
 
-  const ministerios = CATEGORIAS_CONFIRMACAO.filter((m) => convites.some((c) => c.funcoes.some((f) => f.categoriaNome === m)));
+  const ministerios = areas.filter((m) => convites.some((c) => c.funcoes.some((f) => f.categoriaNome === m)));
   const funcoesLista = useMemo(
     () => [...new Set(convites.flatMap((c) => c.funcoes.filter((f) => !ministerio || f.categoriaNome === ministerio).map((f) => f.funcaoNome)))],
     [convites, ministerio]
@@ -180,13 +182,13 @@ export default function ConfirmacoesPainel({
           📤 Enviar confirmação
         </button>
         <span className="ml-3 text-[12.5px] text-ink-600">
-          {CATEGORIAS_CONFIRMACAO.map((m) => `${emojiMinisterio(m)} ${m}`).join("  ·  ")}
+          {areas.map((m) => `${emojiMinisterio(m)} ${m}`).join("  ·  ")}
         </span>
 
         {enviarAberto && (
           <div className="card !p-4 mt-3">
             <p className="mb-3 text-[12.5px] text-ink-600">
-              {pessoasEnvio.length} pessoa(s) escalada(s) em {CATEGORIAS_CONFIRMACAO.join(", ")} em {mesLabel}. Cada uma recebe um
+              {pessoasEnvio.length} pessoa(s) escalada(s) em {areas.join(", ")} em {mesLabel}. Cada uma recebe um
               único link com todas as datas dela — Direção, Palavra Pastoral e Pregação não entram.
             </p>
             <div className="flex flex-col divide-y divide-brand-100">

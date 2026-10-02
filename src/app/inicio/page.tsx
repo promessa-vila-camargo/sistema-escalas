@@ -49,6 +49,7 @@ export default async function InicioPage() {
         tabs={[
           { href: "/inicio", label: "Início" },
           { href: "/escala", label: "Escala" },
+          ...(user.areasConfirmacao.length > 0 ? [{ href: "/confirmacoes", label: "Confirmações" }] : []),
           { href: "/minhas-escalas", label: "Confirmar escala" },
         ]}
       />

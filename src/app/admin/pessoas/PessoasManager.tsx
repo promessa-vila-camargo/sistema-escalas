@@ -5,6 +5,7 @@ import { salvarPessoa, excluirPessoa } from "@/lib/actions/pessoas";
 import { FormError } from "@/components/ui/FormMessage";
 import PasswordField from "@/components/ui/PasswordField";
 import type { CategoriaDTO } from "@/components/EscalaBoard";
+import { CATEGORIAS_CONFIRMACAO } from "@/lib/datas";
 
 type Pessoa = {
   id: string;
@@ -13,6 +14,7 @@ type Pessoa = {
   ativo: boolean;
   verTudo: boolean;
   podeGerenciarEventoExtra: boolean;
+  gerenciaConfirmacao: string[];
   funcaoIds: string[];
 };
 
@@ -106,6 +108,25 @@ function PessoaForm({
           />
           🟠 Pode criar/editar/excluir escalas extraordinárias
         </label>
+        <div className="mt-3">
+          <span className="mb-1 block text-[12px] font-semibold text-ink-600">
+            📋 Pode acompanhar e enviar as confirmações de:
+          </span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {CATEGORIAS_CONFIRMACAO.map((area) => (
+              <label key={area} className="flex items-center gap-2 text-[13px] font-medium text-ink-900">
+                <input
+                  type="checkbox"
+                  name="gerenciaConfirmacao"
+                  value={area}
+                  defaultChecked={editando?.gerenciaConfirmacao.includes(area) ?? false}
+                  className="h-4 w-4 accent-orange-600"
+                />
+                {area}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div>
@@ -226,6 +247,11 @@ export default function PessoasManager({ categorias, pessoas }: { categorias: Ca
               ))}
               {p.podeGerenciarEventoExtra && (
                 <span className="badge-neutral !bg-orange-100 !text-orange-700">🟠 Escalas extraordinárias</span>
+              )}
+              {p.gerenciaConfirmacao.length > 0 && (
+                <span className="badge-neutral !bg-orange-100 !text-orange-700">
+                  📋 Confirmações: {p.gerenciaConfirmacao.join(", ")}
+                </span>
               )}
             </div>
             <span className={p.ativo ? "badge-positive" : "badge-negative"}>{p.ativo ? "Ativo" : "Inativo"}</span>

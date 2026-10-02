@@ -33,6 +33,10 @@ model User {
   /// eventos) pra esse login sem precisar ser ADMIN — preencher função
   /// individual dentro de um evento já segue a permissão normal (funcoes).
   podeGerenciarEventoExtra Boolean @default(false)
+  /// Áreas (nomes de categoria: Som, Datashow, Mídia, Transmissão) cujas
+  /// confirmações esse login pode acompanhar e enviar sem ser ADMIN. Admin
+  /// sempre enxerga todas — ver CurrentUser.areasConfirmacao em lib/auth/dal.ts.
+  gerenciaConfirmacao String[] @default([])
   createdAt    DateTime @default(now())
 
   funcoes     UserFuncao[]

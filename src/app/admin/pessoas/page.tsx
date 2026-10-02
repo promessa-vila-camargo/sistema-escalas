@@ -21,6 +21,7 @@ export default async function AdminPessoasPage() {
     ativo: p.ativo,
     verTudo: p.verTudo,
     podeGerenciarEventoExtra: p.podeGerenciarEventoExtra,
+    gerenciaConfirmacao: p.gerenciaConfirmacao,
     funcaoIds: p.funcoes.map((f) => f.funcaoId),
   }));
 

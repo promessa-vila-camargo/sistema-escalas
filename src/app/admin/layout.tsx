@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         tabs={[
           { href: "/admin", label: "Início" },
           { href: "/admin/escala", label: "Escala" },
-          { href: "/admin/confirmacoes", label: "Confirmações" },
+          { href: "/confirmacoes", label: "Confirmações" },
           { href: "/admin/pessoas", label: "Pessoas" },
         ]}
       />

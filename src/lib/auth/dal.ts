@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { CATEGORIAS_CONFIRMACAO } from "@/lib/datas";
 import { getSessionPayload } from "./session";
 
 export type CurrentUser = {
@@ -12,6 +13,12 @@ export type CurrentUser = {
   funcaoIds: string[];
   verTudo: boolean;
   podeGerenciarEventoExtra: boolean;
+  /**
+   * Áreas (Som, Datashow, Mídia, Transmissão) cujas confirmações essa pessoa
+   * pode acompanhar/enviar. ADMIN = todas; os demais = só as que o admin
+   * liberou em Pessoas. Vazio = sem acesso ao painel de confirmações.
+   */
+  areasConfirmacao: string[];
 };
 
 /**
@@ -43,12 +50,25 @@ export const verifySession = cache(async (): Promise<CurrentUser> => {
     funcaoIds: user.funcoes.map((f) => f.funcaoId),
     verTudo: user.verTudo,
     podeGerenciarEventoExtra: user.podeGerenciarEventoExtra,
+    areasConfirmacao:
+      user.role === "ADMIN"
+        ? [...CATEGORIAS_CONFIRMACAO]
+        : CATEGORIAS_CONFIRMACAO.filter((a) => user.gerenciaConfirmacao.includes(a)),
   };
 });
 
 export const verifyAdmin = cache(async (): Promise<CurrentUser> => {
   const user = await verifySession();
   if (user.role !== "ADMIN") {
+    redirect("/inicio");
+  }
+  return user;
+});
+
+/** Painel de confirmações: ADMIN ou qualquer login com pelo menos uma área liberada (não exige ser admin). */
+export const verifyConfirmacoes = cache(async (): Promise<CurrentUser> => {
+  const user = await verifySession();
+  if (user.areasConfirmacao.length === 0) {
     redirect("/inicio");
   }
   return user;

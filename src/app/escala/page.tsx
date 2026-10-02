@@ -59,6 +59,7 @@ export default async function EscalaVoluntarioPage({
         tabs={[
           { href: "/inicio", label: "Início" },
           { href: "/escala", label: "Escala" },
+          ...(user.areasConfirmacao.length > 0 ? [{ href: "/confirmacoes", label: "Confirmações" }] : []),
           { href: "/minhas-escalas", label: "Confirmar escala" },
         ]}
       />
