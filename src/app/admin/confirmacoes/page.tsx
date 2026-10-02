@@ -1,5 +1,6 @@
 import { verifyAdmin } from "@/lib/auth/dal";
 import { buscarConvitesDoMes } from "@/lib/actions/convite";
+import { fmtDDMM, nomeMes } from "@/lib/datas";
 import MonthYearPicker from "@/components/MonthYearPicker";
 import ConfirmacoesPainel from "@/components/ConfirmacoesPainel";
 
@@ -27,7 +28,12 @@ export default async function AdminConfirmacoesPage({
       <p className="mb-5 text-[12.5px] text-ink-600">
         Cada pessoa escalada recebe um link próprio (sem login). Envie pelo WhatsApp e acompanhe as respostas aqui.
       </p>
-      <ConfirmacoesPainel convites={convites} />
+      <ConfirmacoesPainel
+        key={`${ano}-${mes}`}
+        convites={convites}
+        mesLabel={`${nomeMes(mes)} ${ano}`}
+        intervaloLabel={`${fmtDDMM(ano, mes, 1)} a ${fmtDDMM(ano, mes, new Date(ano, mes + 1, 0).getDate())}`}
+      />
     </div>
   );
 }
