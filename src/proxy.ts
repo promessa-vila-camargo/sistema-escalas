@@ -18,7 +18,11 @@ export async function proxy(request: NextRequest) {
   const isAuthenticated = Boolean(session?.userId);
   const isLoginPage = pathname === LOGIN_PATH;
 
-  if (!isAuthenticated && !isLoginPage) {
+  // Link individual de confirmação de escala — aberto de propósito (a pessoa
+  // não tem login); quem protege é a assinatura do link, ver lib/convite.ts.
+  const isConfirmacaoPublica = pathname.startsWith("/confirmar/");
+
+  if (!isAuthenticated && !isLoginPage && !isConfirmacaoPublica) {
     return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
   }
 

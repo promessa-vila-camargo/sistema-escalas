@@ -156,7 +156,7 @@ export default async function AdminHomePage() {
       {trocasPendentes.length > 0 && (
         <div className="card">
           <h2 className="mb-3 flex items-center gap-2 text-[13px] font-extrabold uppercase tracking-wide text-ink-600">
-            🔄 Pedidos de troca
+            🔴 Não podem participar
             <span className="badge-negative !bg-red-50 !text-red-600">{trocasPendentes.length} pendente(s)</span>
           </h2>
           <div className="flex flex-col gap-2">
