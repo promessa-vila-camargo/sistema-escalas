@@ -24,6 +24,19 @@ export function conviteValido(data: string, nome: string, k: string | undefined)
   return esperado.length === recebido.length && timingSafeEqual(esperado, recebido);
 }
 
+/**
+ * Link mensal: /confirmar/<YYYY-MM>/<nome>?k=<assinatura da pessoa>. A
+ * assinatura vale pra qualquer mês daquela pessoa (é o que permite navegar
+ * entre meses na própria tela), mas não serve pra outra pessoa.
+ */
+export function conviteMesValido(nome: string, k: string | undefined) {
+  return conviteValido("*", nome, k);
+}
+
+export function caminhoConviteMes(mes: string, nome: string) {
+  return `/confirmar/${mes}/${encodeURIComponent(nome)}?k=${assinar("*", nome)}`;
+}
+
 export function caminhoConvite(data: string, nome: string) {
   return `/confirmar/${data}/${encodeURIComponent(nome)}?k=${assinar(data, nome)}`;
 }

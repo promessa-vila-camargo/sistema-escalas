@@ -132,17 +132,23 @@ export default function ConfirmacoesPainel({
   ].filter(Boolean);
 
   function linkCompleto(c: ConviteAdminDTO) {
-    return `${window.location.origin}${c.caminho}`;
+    return `${window.location.origin}${c.caminhoMes}`;
   }
 
+  // Um único link por pessoa no mês: a mensagem lista todas as datas dela (independente dos filtros ativos).
   function mensagem(c: ConviteAdminDTO) {
-    const funcoes = c.funcoes.map((f) => labelFuncao(f.funcaoNome, c.diaSemana)).join(" e ");
+    const datas = convites.filter((x) => x.nome === c.nome);
+    const linhas = datas.map((x) => {
+      const funcoes = x.funcoes.map((f) => labelFuncao(f.funcaoNome, x.diaSemana)).join(" e ");
+      return `• ${DIA[x.diaSemana]} ${ddmm(x.data)} — ${funcoes}`;
+    });
     return [
       `${titulo(c.nome.split(" ")[0])}, tudo bem? 👋`,
       "",
-      `Você está escalado para *${funcoes}* — ${DIA[c.diaSemana]}, ${ddmm(c.data)}.`,
+      `Sua escala de *${mesLabel.split(" ")[0]}* está pronta:`,
+      ...linhas,
       "",
-      "É só clicar no link abaixo e informar se consegue participar:",
+      "É só clicar no link abaixo e confirmar (dá pra confirmar tudo de uma vez):",
       linkCompleto(c),
     ].join("\n");
   }
@@ -345,7 +351,7 @@ export default function ConfirmacoesPainel({
                         rel="noopener noreferrer"
                         className="rounded-full bg-green-600 px-3 py-1.5 text-[12px] font-bold text-white"
                       >
-                        📲 WhatsApp
+                        📲 Enviar link do mês
                       </a>
                       <button
                         type="button"
