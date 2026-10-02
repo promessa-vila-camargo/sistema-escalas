@@ -7,6 +7,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * ninguém consegue montar o link de outra pessoa só adivinhando nome e data,
  * e não precisa guardar token nenhum no banco (é sempre recalculável).
  */
+/** Mesmo nome escrito de formas diferentes (Davi / DAVI / "davi ") é a mesma pessoa. */
+export function normalizarNome(nome: string) {
+  return nome.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+/** Placeholders como "-" não são pessoas — não entram em nenhum envio de confirmação. */
+export function nomeEhPessoa(nome: string) {
+  return /\p{L}/u.test(nome);
+}
+
 function assinar(data: string, nome: string) {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET não configurado.");
@@ -19,9 +29,13 @@ export function assinarConvite(data: string, nome: string) {
 
 export function conviteValido(data: string, nome: string, k: string | undefined) {
   if (!k) return false;
-  const esperado = Buffer.from(assinar(data, nome));
   const recebido = Buffer.from(k);
-  return esperado.length === recebido.length && timingSafeEqual(esperado, recebido);
+  // aceita tanto o nome exatamente como veio no link (links já enviados antes da
+  // normalização) quanto o nome normalizado (links novos)
+  return [nome, normalizarNome(nome)].some((candidato) => {
+    const esperado = Buffer.from(assinar(data, candidato));
+    return esperado.length === recebido.length && timingSafeEqual(esperado, recebido);
+  });
 }
 
 /**
@@ -34,9 +48,11 @@ export function conviteMesValido(nome: string, k: string | undefined) {
 }
 
 export function caminhoConviteMes(mes: string, nome: string) {
-  return `/confirmar/${mes}/${encodeURIComponent(nome)}?k=${assinar("*", nome)}`;
+  const n = normalizarNome(nome);
+  return `/confirmar/${mes}/${encodeURIComponent(n)}?k=${assinar("*", n)}`;
 }
 
 export function caminhoConvite(data: string, nome: string) {
-  return `/confirmar/${data}/${encodeURIComponent(nome)}?k=${assinar(data, nome)}`;
+  const n = normalizarNome(nome);
+  return `/confirmar/${data}/${encodeURIComponent(n)}?k=${assinar(data, n)}`;
 }
