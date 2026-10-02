@@ -15,8 +15,8 @@ export type CurrentUser = {
   podeGerenciarEventoExtra: boolean;
   /**
    * Áreas (Som, Datashow, Mídia, Transmissão) cujas confirmações essa pessoa
-   * pode acompanhar/enviar. ADMIN = todas; os demais = só as que o admin
-   * liberou em Pessoas. Vazio = sem acesso ao painel de confirmações.
+   * pode acompanhar/enviar. ADMIN = todas; os demais = as áreas das funções que
+   * eles editam + as liberadas à parte em Pessoas. Vazio = sem acesso ao painel.
    */
   areasConfirmacao: string[];
 };
@@ -35,7 +35,7 @@ export const verifySession = cache(async (): Promise<CurrentUser> => {
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    include: { funcoes: true },
+    include: { funcoes: { include: { funcao: { include: { categoria: true } } } } },
   });
 
   if (!user || !user.ativo) {
@@ -50,10 +50,14 @@ export const verifySession = cache(async (): Promise<CurrentUser> => {
     funcaoIds: user.funcoes.map((f) => f.funcaoId),
     verTudo: user.verTudo,
     podeGerenciarEventoExtra: user.podeGerenciarEventoExtra,
+    // ADMIN = todas. Os demais acompanham as áreas em que podem editar alguma função
+    // (quem monta a escala daquela área) + as que o admin liberou à parte em Pessoas.
     areasConfirmacao:
       user.role === "ADMIN"
         ? [...CATEGORIAS_CONFIRMACAO]
-        : CATEGORIAS_CONFIRMACAO.filter((a) => user.gerenciaConfirmacao.includes(a)),
+        : CATEGORIAS_CONFIRMACAO.filter(
+            (a) => user.gerenciaConfirmacao.includes(a) || user.funcoes.some((f) => f.funcao.categoria.nome === a)
+          ),
   };
 });
 

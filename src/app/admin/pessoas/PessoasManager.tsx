@@ -110,7 +110,7 @@ function PessoaForm({
         </label>
         <div className="mt-3">
           <span className="mb-1 block text-[12px] font-semibold text-ink-600">
-            📋 Pode acompanhar e enviar as confirmações de:
+            📋 Também pode acompanhar e enviar as confirmações de (além das áreas das funções que ele já edita):
           </span>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {CATEGORIAS_CONFIRMACAO.map((area) => (
