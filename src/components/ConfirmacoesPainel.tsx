@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { ConviteAdminDTO, StatusPessoa } from "@/lib/actions/convite";
-import { fmtDDMM, labelFuncao, parseIsoDate } from "@/lib/datas";
-import { emojiFuncao } from "@/lib/emojis";
+import { CATEGORIAS_CONFIRMACAO, fmtDDMM, labelFuncao, parseIsoDate } from "@/lib/datas";
+import { emojiFuncao, emojiMinisterio } from "@/lib/emojis";
 
 const DIA: Record<number, string> = { 0: "Domingo", 3: "Quarta-feira", 6: "Sábado" };
 
@@ -46,6 +46,7 @@ export default function ConfirmacoesPainel({
   const [funcao, setFuncao] = useState("");
   const [pessoa, setPessoa] = useState("");
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [enviarAberto, setEnviarAberto] = useState(false);
 
   const diasComEscala = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -53,7 +54,7 @@ export default function ConfirmacoesPainel({
     return [...mapa.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([data, diaSemana]) => ({ data, diaSemana }));
   }, [convites]);
 
-  const ministerios = useMemo(() => [...new Set(convites.flatMap((c) => c.funcoes.map((f) => f.categoriaNome)))], [convites]);
+  const ministerios = CATEGORIAS_CONFIRMACAO.filter((m) => convites.some((c) => c.funcoes.some((f) => f.categoriaNome === m)));
   const funcoesLista = useMemo(
     () => [...new Set(convites.flatMap((c) => c.funcoes.filter((f) => !ministerio || f.categoriaNome === ministerio).map((f) => f.funcaoNome)))],
     [convites, ministerio]
@@ -73,6 +74,12 @@ export default function ConfirmacoesPainel({
       }))
       .filter((x) => x.funcoesVisiveis.length > 0);
   }, [convites, diasAplicados, pessoa, ministerio, funcao]);
+
+  const pessoasEnvio = useMemo(() => {
+    const mapa = new Map<string, ConviteAdminDTO[]>();
+    for (const c of convites) mapa.set(c.nome, [...(mapa.get(c.nome) ?? []), c]);
+    return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
+  }, [convites]);
 
   const visiveis = status === "TODOS" ? base : base.filter((x) => x.c.status === status);
   const contagem = {
@@ -153,9 +160,8 @@ export default function ConfirmacoesPainel({
     ].join("\n");
   }
 
-  async function copiar(c: ConviteAdminDTO) {
+  async function copiar(c: ConviteAdminDTO, chave: string) {
     await navigator.clipboard.writeText(mensagem(c));
-    const chave = `${c.data}|${c.nome}`;
     setCopiado(chave);
     setTimeout(() => setCopiado((atual) => (atual === chave ? null : atual)), 2000);
   }
@@ -169,6 +175,57 @@ export default function ConfirmacoesPainel({
 
   return (
     <div>
+      <div className="mb-4">
+        <button type="button" onClick={() => setEnviarAberto((v) => !v)} className="btn-primary">
+          📤 Enviar confirmação
+        </button>
+        <span className="ml-3 text-[12.5px] text-ink-600">
+          {CATEGORIAS_CONFIRMACAO.map((m) => `${emojiMinisterio(m)} ${m}`).join("  ·  ")}
+        </span>
+
+        {enviarAberto && (
+          <div className="card !p-4 mt-3">
+            <p className="mb-3 text-[12.5px] text-ink-600">
+              {pessoasEnvio.length} pessoa(s) escalada(s) em {CATEGORIAS_CONFIRMACAO.join(", ")} em {mesLabel}. Cada uma recebe um
+              único link com todas as datas dela — Direção, Palavra Pastoral e Pregação não entram.
+            </p>
+            <div className="flex flex-col divide-y divide-brand-100">
+              {pessoasEnvio.map(([nome, lista]) => {
+                const pendentes = lista.filter((c) => c.status === "AGUARDANDO").length;
+                const chave = `envio|${nome}`;
+                return (
+                  <div key={nome} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
+                    <div className="min-w-[150px] flex-1">
+                      <div className="text-[13.5px] font-bold text-ink-900">{titulo(nome)}</div>
+                      <div className="text-[12px] text-ink-600">
+                        {lista.length} data(s) · {pendentes > 0 ? `🟡 ${pendentes} aguardando` : "✅ tudo respondido"}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(mensagem(lista[0]))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full bg-green-600 px-3 py-1.5 text-[12px] font-bold text-white"
+                      >
+                        📲 WhatsApp
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copiar(lista[0], chave)}
+                        className="rounded-full bg-brand-50 px-3 py-1.5 text-[12px] font-bold text-ink-900"
+                      >
+                        {copiado === chave ? "✓ Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="card !p-4 mb-4">
         <div className="mb-3 flex flex-wrap items-end gap-3">
           <div className="relative">
@@ -344,23 +401,6 @@ export default function ConfirmacoesPainel({
                     <span className={"text-[12.5px] font-bold " + v.classe}>
                       {v.emoji} {v.texto}
                     </span>
-                    <div className="flex gap-2">
-                      <a
-                        href={`https://wa.me/?text=${encodeURIComponent(mensagem(c))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-full bg-green-600 px-3 py-1.5 text-[12px] font-bold text-white"
-                      >
-                        📲 Enviar link do mês
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => copiar(c)}
-                        className="rounded-full bg-brand-50 px-3 py-1.5 text-[12px] font-bold text-ink-900"
-                      >
-                        {copiado === chave ? "✓ Copiado" : "Copiar"}
-                      </button>
-                    </div>
                   </div>
                 );
               })}

@@ -26,7 +26,7 @@ export default async function AdminConfirmacoesPage({
         <MonthYearPicker ano={ano} mes={mes} basePath="/admin/confirmacoes" />
       </div>
       <p className="mb-5 text-[12.5px] text-ink-600">
-        Cada pessoa escalada recebe um link próprio (sem login). Envie pelo WhatsApp e acompanhe as respostas aqui.
+        Confirmação só para Som, Datashow, Mídia e Transmissão. Cada pessoa recebe um link próprio (sem login) — envie pelo WhatsApp e acompanhe as respostas aqui.
       </p>
       <ConfirmacoesPainel
         key={`${ano}-${mes}`}

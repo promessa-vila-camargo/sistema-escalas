@@ -104,6 +104,15 @@ export const MESES_LISTA = MESES;
 /** Categorias que podem ter escalas extraordinárias (fora do horário oficial). */
 export const CATEGORIAS_ESCALA_EXTRAORDINARIA = ["Mídia", "Datashow", "Transmissão", "Som"];
 
+/**
+ * Só estas áreas entram no fluxo de confirmação por link (POSSO / NÃO POSSO /
+ * CONFIRMAR TODAS / status). Direção, Palavra Pastoral e Pregação continuam na
+ * escala normalmente, mas nunca recebem link nem aparecem nas telas de
+ * confirmação. É uma lista de nomes de CATEGORIA (ministério) — qualquer
+ * função nova cadastrada dentro dessas categorias já entra automaticamente.
+ */
+export const CATEGORIAS_CONFIRMACAO = ["Som", "Datashow", "Mídia", "Transmissão"];
+
 /** Formata uma data livre "YYYY-MM-DD" como "sábado, 04/10/2026" — pro cabeçalho de uma escala extraordinária. */
 export function fmtDataCompleta(iso: string) {
   const { y, m, d } = parseIsoDate(iso);

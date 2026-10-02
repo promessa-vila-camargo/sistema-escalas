@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifyAdmin } from "@/lib/auth/dal";
 import { caminhoConvite, caminhoConviteMes, conviteMesValido, conviteValido } from "@/lib/convite";
-import { isoDate } from "@/lib/datas";
+import { CATEGORIAS_CONFIRMACAO, isoDate } from "@/lib/datas";
+
+/** Restringe qualquer consulta/atualização às áreas que participam da confirmação (Som, Datashow, Mídia, Transmissão). */
+const SO_CONFIRMAVEIS = { funcao: { categoria: { nome: { in: CATEGORIAS_CONFIRMACAO } } } };
 
 const DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -50,7 +53,7 @@ export async function buscarConvite(data: string, nome: string, k: string | unde
   if (!DATA_RE.test(data) || !conviteValido(data, nome, k)) return null;
 
   const linhas = await prisma.atribuicao.findMany({
-    where: { data: new Date(data), nomeEscalado: nome },
+    where: { data: new Date(data), nomeEscalado: nome, ...SO_CONFIRMAVEIS },
     include: { funcao: { include: { categoria: true } } },
     orderBy: { funcao: { ordem: "asc" } },
   });
@@ -83,7 +86,7 @@ export async function responderConvite(
 }
 
 async function aplicarResposta(data: string, nome: string, resposta: "POSSO" | "NAO_POSSO", motivo: string | null) {
-  const where = { data: new Date(data), nomeEscalado: nome };
+  const where = { data: new Date(data), nomeEscalado: nome, ...SO_CONFIRMAVEIS };
   const resultado =
     resposta === "POSSO"
       ? await prisma.atribuicao.updateMany({
@@ -109,7 +112,7 @@ export async function buscarConviteMes(mes: string, nome: string, k: string | un
   const { de, ate } = limitesDoMes(mes);
 
   const linhas = await prisma.atribuicao.findMany({
-    where: { nomeEscalado: nome, data: { gte: de, lte: ate } },
+    where: { nomeEscalado: nome, data: { gte: de, lte: ate }, ...SO_CONFIRMAVEIS },
     include: { funcao: { include: { categoria: true } } },
     orderBy: [{ data: "asc" }, { funcao: { ordem: "asc" } }],
   });
@@ -153,7 +156,7 @@ export async function confirmarTodasDoMes(mes: string, nome: string, k: string):
   const { de, ate } = limitesDoMes(mes);
 
   const naoPodem = await prisma.atribuicao.findMany({
-    where: { nomeEscalado: nome, data: { gte: de, lte: ate }, status: "TROCA_SOLICITADA" },
+    where: { nomeEscalado: nome, data: { gte: de, lte: ate }, status: "TROCA_SOLICITADA", ...SO_CONFIRMAVEIS },
     select: { data: true },
   });
   const resultado = await prisma.atribuicao.updateMany({
@@ -161,6 +164,7 @@ export async function confirmarTodasDoMes(mes: string, nome: string, k: string):
       nomeEscalado: nome,
       data: { gte: de, lte: ate, notIn: naoPodem.map((r) => r.data) },
       status: "AGUARDANDO",
+      ...SO_CONFIRMAVEIS,
     },
     data: { status: "CONFIRMADO", confirmadoEm: new Date(), trocaObservacao: null },
   });
@@ -177,7 +181,7 @@ export async function buscarConvitesDoMes(ano: number, mes: number): Promise<Con
   const ultimo = isoDate(ano, mes, new Date(ano, mes + 1, 0).getDate());
 
   const linhas = await prisma.atribuicao.findMany({
-    where: { data: { gte: new Date(primeiro), lte: new Date(ultimo) }, nomeEscalado: { not: null } },
+    where: { data: { gte: new Date(primeiro), lte: new Date(ultimo) }, nomeEscalado: { not: null }, ...SO_CONFIRMAVEIS },
     include: { funcao: { include: { categoria: true } } },
     orderBy: [{ data: "asc" }, { funcao: { ordem: "asc" } }],
   });

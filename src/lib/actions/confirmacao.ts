@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/auth/dal";
+import { CATEGORIAS_CONFIRMACAO } from "@/lib/datas";
+
+/** Confirmação só vale pra Som, Datashow, Mídia e Transmissão — as demais funções ficam fora (ver CATEGORIAS_CONFIRMACAO). */
+const SO_CONFIRMAVEIS = { funcao: { categoria: { nome: { in: CATEGORIAS_CONFIRMACAO } } } };
 
 function refreshConfirmacaoPages() {
   revalidatePath("/minhas-escalas");
@@ -13,7 +17,7 @@ function refreshConfirmacaoPages() {
 
 /** Confere que a atribuição existe e pertence mesmo a quem está chamando — nunca confia só no id vindo do cliente. */
 async function atribuicaoDoUsuario(atribuicaoId: string, userId: string) {
-  const atribuicao = await prisma.atribuicao.findUnique({ where: { id: atribuicaoId } });
+  const atribuicao = await prisma.atribuicao.findFirst({ where: { id: atribuicaoId, ...SO_CONFIRMAVEIS } });
   if (!atribuicao || atribuicao.userId !== userId) {
     throw new Error("Essa escala não foi encontrada ou não pertence a você.");
   }
@@ -67,7 +71,7 @@ export async function buscarMinhasEscalas(): Promise<MinhaEscalaDTO[]> {
   hoje.setUTCHours(0, 0, 0, 0);
 
   const rows = await prisma.atribuicao.findMany({
-    where: { userId: me.id, data: { gte: hoje } },
+    where: { userId: me.id, data: { gte: hoje }, ...SO_CONFIRMAVEIS },
     include: { funcao: { include: { categoria: true } } },
     orderBy: { data: "asc" },
   });
@@ -103,7 +107,7 @@ export async function buscarTrocasPendentes(): Promise<TrocaPendenteDTO[]> {
   hoje.setUTCHours(0, 0, 0, 0);
 
   const rows = await prisma.atribuicao.findMany({
-    where: { status: "TROCA_SOLICITADA", data: { gte: hoje } },
+    where: { status: "TROCA_SOLICITADA", data: { gte: hoje }, ...SO_CONFIRMAVEIS },
     include: { funcao: { include: { categoria: true } } },
     orderBy: { data: "asc" },
   });
