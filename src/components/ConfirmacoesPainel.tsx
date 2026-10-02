@@ -91,8 +91,12 @@ export default function ConfirmacoesPainel({
     AGUARDANDO: base.filter((x) => x.c.status === "AGUARDANDO").length,
   };
 
-  const porData = new Map<string, typeof visiveis>();
-  for (const x of visiveis) porData.set(x.c.data, [...(porData.get(x.c.data) ?? []), x]);
+  // uma linha por pessoa, com todos os dias dela (já respeitando os filtros)
+  const porPessoa = [
+    ...visiveis
+      .reduce((mapa, x) => mapa.set(x.c.nome, [...(mapa.get(x.c.nome) ?? []), x]), new Map<string, typeof visiveis>())
+      .entries(),
+  ].sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
 
   const algumFiltro = diasAplicados !== null || status !== "TODOS" || ministerio || funcao || pessoa;
 
@@ -379,36 +383,61 @@ export default function ConfirmacoesPainel({
 
       {visiveis.length === 0 && <p className="empty-state">Nenhuma escala com esses filtros.</p>}
 
-      <div className="flex flex-col gap-4">
-        {[...porData.entries()].map(([data, lista]) => (
-          <div key={data} className="card !p-4">
-            <h2 className="mb-3 text-[13px] font-extrabold uppercase tracking-wide text-ink-600">
-              📅 {DIA[lista[0].c.diaSemana]} · {ddmm(data)}
-            </h2>
-            <div className="flex flex-col divide-y divide-brand-100">
-              {lista.map(({ c, funcoesVisiveis }) => {
-                const v = STATUS_VISUAL[c.status];
-                const chave = `${c.data}|${c.nome}`;
-                return (
-                  <div key={chave} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
-                    <div className="min-w-[150px] flex-1">
-                      <div className="text-[13.5px] font-bold text-ink-900">{titulo(c.nome)}</div>
-                      <div className="text-[12px] text-ink-600">
-                        {funcoesVisiveis
-                          .map((f) => `${emojiFuncao(f.funcaoNome)} ${labelFuncao(f.funcaoNome, c.diaSemana)}`)
-                          .join(" · ")}
-                      </div>
-                      {c.motivo && <div className="mt-0.5 text-[12px] italic text-ink-400">📝 {c.motivo}</div>}
-                    </div>
-                    <span className={"text-[12.5px] font-bold " + v.classe}>
-                      {v.emoji} {v.texto}
+      <div className="flex flex-col gap-3">
+        {porPessoa.map(([nome, dias]) => {
+          const rotulo = (x: (typeof dias)[number]) =>
+            x.funcoesVisiveis.map((f) => `${emojiFuncao(f.funcaoNome)} ${labelFuncao(f.funcaoNome, x.c.diaSemana)}`).join(" + ");
+          const rotulos = new Set(dias.map(rotulo));
+          const mesmaFuncao = rotulos.size === 1; // mesma função em todos os dias: mostra uma vez só
+          const n = (s: StatusPessoa) => dias.filter((x) => x.c.status === s).length;
+          const motivos = dias.filter((x) => x.c.motivo);
+          return (
+            <div key={nome} className="card !p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <div>
+                  <span className="text-[14px] font-bold text-ink-900">{titulo(nome)}</span>
+                  {mesmaFuncao && <span className="ml-2 text-[12px] text-ink-600">{[...rotulos][0]}</span>}
+                </div>
+                <div className="text-[12px] font-bold text-ink-600">
+                  {dias.length} dia(s) · <span className="text-green-600">🟢 {n("CONFIRMADO")}</span> ·{" "}
+                  <span className="text-orange-600">🟡 {n("AGUARDANDO")}</span> ·{" "}
+                  <span className="text-red-600">🔴 {n("NAO_PODE")}</span>
+                </div>
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {dias.map((x) => {
+                  const v = STATUS_VISUAL[x.c.status];
+                  return (
+                    <span
+                      key={x.c.data}
+                      title={`${DIA[x.c.diaSemana]} ${ddmm(x.c.data)} — ${v.texto}`}
+                      className={
+                        "rounded-full border px-2.5 py-1 text-[12px] font-semibold " +
+                        (x.c.status === "CONFIRMADO"
+                          ? "border-green-600/30 bg-green-50 text-green-600"
+                          : x.c.status === "NAO_PODE"
+                            ? "border-red-500/30 bg-red-50 text-red-600"
+                            : "border-orange-500/30 bg-orange-50 text-orange-700")
+                      }
+                    >
+                      {DIA[x.c.diaSemana].slice(0, 3)} {ddmm(x.c.data)}
+                      {!mesmaFuncao && <> · {rotulo(x)}</>} {v.emoji}
                     </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              {motivos.length > 0 && (
+                <div className="mt-2 flex flex-col gap-0.5">
+                  {motivos.map((x) => (
+                    <div key={x.c.data} className="text-[12px] italic text-ink-400">
+                      📝 {ddmm(x.c.data)}: {x.c.motivo}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
