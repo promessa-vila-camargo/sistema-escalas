@@ -7,78 +7,81 @@ import {
   buildMonthDays,
   buildMonthDaysFlat,
   fmtDDMM,
-  nomeDiaSemana,
+  nomeDiaSemanaLongo,
   nomeMes,
-  nomeMesAbrev,
+  parseIsoDate,
   labelFuncao,
   FUNCOES_SEM_REPETICAO_DOMINGO,
   MINISTERIOS_RESPONSAVEIS,
 } from "@/lib/datas";
+import {
+  cabecalhoDocumento,
+  cultosExportaveis,
+  mensagemWhatsapp,
+  pendenciasDoDia,
+  CONTEUDO_COMPLETO,
+  type ConteudoExportacao,
+  type DadosEscala,
+} from "@/lib/exportacao";
 import type { CurrentUser } from "@/lib/auth/dal";
-import { emojiMinisterio, emojiFuncao } from "@/lib/emojis";
 import AtividadesDoDia from "./AtividadesDoDia";
-
-/** Checkbox grande com suporte a estado "indeterminado" (parte das funções da categoria selecionada) — só dá pra setar via DOM, não como prop do React. */
-function CheckboxTriState({
-  checked,
-  indeterminate,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <label className="flex cursor-pointer select-none items-center gap-2.5 py-0.5">
-      <input
-        ref={ref}
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-5 w-5 flex-none accent-orange-600"
-      />
-      <span className="text-[13px] font-medium text-ink-900">{label}</span>
-    </label>
-  );
-}
+import MonthYearPicker from "./MonthYearPicker";
+import Icon, { Spinner } from "./ui/Icon";
+import Modal from "./ui/Modal";
+import type { ItemMenu } from "./ui/Menu";
+import Impressao, { abrirImpressao } from "./ui/Impressao";
+import CultoCard from "./escala/CultoCard";
+import FuncaoLinha, { DivisorMinisterio, type StatusConfirmacao } from "./escala/FuncaoLinha";
+import SeletorExportacao, { type AcaoExportacao } from "./escala/SeletorExportacao";
+import DocumentoEscala from "./escala/DocumentoEscala";
 
 export type FuncaoDTO = { id: string; nome: string; categoriaId: string; ordem: number; diasSemana: number[] };
 export type CategoriaDTO = { id: string; nome: string; ordem: number; funcoes: FuncaoDTO[] };
 export type AtribuicaoMap = Record<string, Record<string, string | null>>;
 export type ObservacaoMap = Record<string, string>;
 export type MinisterioResponsavelMap = Record<string, string>;
+export type ConfirmacaoMap = Record<string, Record<string, StatusConfirmacao>>;
 
 type DiaInfo = { data: string; dia: number; diaSemana: number };
-type PrintTarget = "mes" | DiaInfo;
 type ParFds = { sab: DiaInfo | null; dom: DiaInfo | null };
+/** Um pedido de exportação já decidido: quais datas e qual conteúdo — o PDF é gerado só a partir disso. */
+type Exportacao = { datas: string[]; conteudo: ConteudoExportacao };
 
 const SAVE_DEBOUNCE_MS = 600;
+
+function normalizar(v: string | null | undefined) {
+  return (v ?? "").trim().toUpperCase();
+}
 
 export default function EscalaBoard({
   ano,
   mes,
+  basePath,
+  rotulo = "Escala oficial",
+  descricao,
   categorias,
   atribuicoesIniciais,
   observacoesIniciais,
   ministeriosResponsaveisIniciais,
   atividadesIniciais,
+  confirmacoesIniciais,
   currentUser,
   showExport,
   pessoasCadastradas,
 }: {
   ano: number;
   mes: number;
+  /** Rota da página (pra navegação de mês). */
+  basePath: string;
+  rotulo?: string;
+  descricao?: string;
   categorias: CategoriaDTO[];
   atribuicoesIniciais: AtribuicaoMap;
   observacoesIniciais?: ObservacaoMap;
   ministeriosResponsaveisIniciais?: MinisterioResponsavelMap;
   atividadesIniciais?: Record<string, AtividadeDTO[]>;
+  /** Status de confirmação (Som, Datashow, Mídia, Transmissão) de quem tem login — só leitura aqui. */
+  confirmacoesIniciais?: ConfirmacaoMap;
   currentUser: CurrentUser;
   showExport?: boolean;
   /** Nomes dos logins ativos — vira sugestão de autocompletar no campo de texto livre "escalado". Digitar exatamente um desses nomes é o que liga essa atribuição à tela de confirmação da pessoa. */
@@ -90,32 +93,38 @@ export default function EscalaBoard({
     ministeriosResponsaveisIniciais ?? {}
   );
   const [atividades, setAtividades] = useState<Record<string, AtividadeDTO[]>>(atividadesIniciais ?? {});
-  const [confirmando, setConfirmando] = useState<{
-    alvo: PrintTarget;
-    acao: "preview" | "baixar";
-    pendentes: { data: string; dia: number; diaSemana: number; faltando: string[] }[];
-  } | null>(null);
-  const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
-  const [previewAberto, setPreviewAberto] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
   const [salvandoTudo, setSalvandoTudo] = useState(false);
-  const [modalExportAlvo, setModalExportAlvo] = useState<PrintTarget | null>(null);
-  const [selecaoExport, setSelecaoExport] = useState<Record<string, boolean>>({});
-  const [categoriasExpandidas, setCategoriasExpandidas] = useState<Record<string, boolean>>({});
-  const [incluirAtividadesExport, setIncluirAtividadesExport] = useState(true);
-  const [erroSelecaoExport, setErroSelecaoExport] = useState<string | null>(null);
+  const [ultimoSalvamento, setUltimoSalvamento] = useState<Date | null>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const avisoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Último valor (normalizado) enviado ao servidor por campo — sair de um campo sem ter mudado nada não regrava. */
+  const ultimoEnviado = useRef<Record<string, string>>({});
+
+  // ---- exportação / compartilhamento ----
+  const cultosExport = useMemo(() => cultosExportaveis(ano, mes), [ano, mes]);
+  /** Datas marcadas no seletor — começa com o mês inteiro e fica guardada enquanto a tela está aberta. */
+  const [datasSelecionadas, setDatasSelecionadas] = useState<string[]>(() => cultosExport.map((c) => c.data));
+  const [funcoesExcluidas, setFuncoesExcluidas] = useState<Set<string>>(() => new Set());
+  const [incluirAtividades, setIncluirAtividades] = useState(true);
+  const [seletorAberto, setSeletorAberto] = useState<null | "pdf" | "whatsapp">(null);
+  const [exportacao, setExportacao] = useState<Exportacao | null>(null);
+  const [pendentesExport, setPendentesExport] = useState<{
+    exp: Exportacao;
+    acao: "baixar" | "visualizar";
+    dias: { data: string; faltando: string[] }[];
+  } | null>(null);
+  const [previewAberto, setPreviewAberto] = useState(false);
+  const [imprimindo, setImprimindo] = useState(false);
 
   /**
-   * Indicador global de autosave (section 4 do pedido do admin) — reflete o
-   * estado de QUALQUER campo sendo digitado/salvo no momento, não um campo só.
-   * "digitando" enquanto há um debounce pendente, "salvando" enquanto a
-   * requisição está em voo, "erro" quando a última tentativa falhou (e aí o
-   * próprio commitSave/commitObservacao reagenda sozinho — não é o usuário
-   * quem precisa tentar de novo), "salvo" depois que tudo que estava
-   * pendente terminou com sucesso.
+   * Indicador global de autosave — reflete o estado de QUALQUER campo sendo
+   * digitado/salvo no momento. "digitando" enquanto há um debounce pendente,
+   * "salvando" enquanto a requisição está em voo, "erro" quando a última
+   * tentativa falhou (e aí o próprio commitComRetry reagenda sozinho — não é
+   * o usuário quem precisa tentar de novo), "salvo" depois que tudo que
+   * estava pendente terminou com sucesso.
    */
   const [saveStatus, setSaveStatus] = useState<"idle" | "digitando" | "salvando" | "salvo" | "erro">("idle");
   const inflightRef = useRef(0);
@@ -128,8 +137,22 @@ export default function EscalaBoard({
   /** Chamado depois que uma requisição termina (sucesso) — decide se ainda há outra coisa em fila ou se já pode mostrar "Salvo". */
   function atualizarStatusAposRequisicao() {
     if (inflightRef.current > 0) return;
-    setSaveStatus(temPendenciaDeDigitacao() ? "digitando" : "salvo");
+    if (temPendenciaDeDigitacao()) {
+      setSaveStatus("digitando");
+    } else {
+      setSaveStatus("salvo");
+      setUltimoSalvamento(new Date());
+    }
   }
+
+  // Avisa antes de fechar/recarregar a aba se ainda há algo não salvo.
+  useEffect(() => {
+    function antesDeSair(e: BeforeUnloadEvent) {
+      if (inflightRef.current > 0 || temPendenciaDeDigitacao()) e.preventDefault();
+    }
+    window.addEventListener("beforeunload", antesDeSair);
+    return () => window.removeEventListener("beforeunload", antesDeSair);
+  }, []);
 
   const dias = useMemo(() => buildMonthDays(ano, mes), [ano, mes]);
 
@@ -155,52 +178,6 @@ export default function EscalaBoard({
   }, [dias]);
   const isAdmin = currentUser.role === "ADMIN";
   const temAlgumaFuncao = categorias.some((c) => c.funcoes.length > 0);
-
-  /** Todas as funções do sistema (pro "Selecionar todas"/"Limpar seleção" do modal de exportação). */
-  const todasFuncaoIdsExport = useMemo(() => categorias.flatMap((c) => c.funcoes.map((f) => f.id)), [categorias]);
-
-  /** Selecionada por padrão até o usuário mexer no modal — não existe uma "seleção anterior" persistida. */
-  function isSelecionadaExport(funcaoId: string) {
-    return selecaoExport[funcaoId] ?? true;
-  }
-
-  /** "checked" (todas as funções marcadas), "unchecked" (nenhuma) ou "indeterminate" (só algumas) — pro checkbox da categoria no modal de exportação. */
-  function estadoCategoriaExport(cat: CategoriaDTO): "checked" | "unchecked" | "indeterminate" {
-    if (cat.funcoes.length === 0) return "unchecked";
-    const marcadas = cat.funcoes.filter((f) => isSelecionadaExport(f.id)).length;
-    if (marcadas === cat.funcoes.length) return "checked";
-    if (marcadas === 0) return "unchecked";
-    return "indeterminate";
-  }
-
-  /** Clicar na categoria (fora do indeterminado) alterna todas as funções dela de uma vez; no indeterminado, marca todas. */
-  function toggleCategoriaExport(cat: CategoriaDTO) {
-    const marcarTudo = estadoCategoriaExport(cat) !== "checked";
-    setSelecaoExport((old) => {
-      const next = { ...old };
-      for (const f of cat.funcoes) next[f.id] = marcarTudo;
-      return next;
-    });
-    setErroSelecaoExport(null);
-  }
-
-  function toggleFuncaoExport(funcaoId: string) {
-    setSelecaoExport((old) => ({ ...old, [funcaoId]: !isSelecionadaExport(funcaoId) }));
-    setErroSelecaoExport(null);
-  }
-
-  function selecionarTodasExport() {
-    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, true])));
-    setErroSelecaoExport(null);
-  }
-
-  function limparSelecaoExport() {
-    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, false])));
-  }
-
-  function toggleCategoriaExpandida(catId: string) {
-    setCategoriasExpandidas((old) => ({ ...old, [catId]: !(old[catId] ?? true) }));
-  }
 
   /**
    * "Ver apenas minha responsabilidade" (padrão): só aparece o que foi
@@ -248,19 +225,6 @@ export default function EscalaBoard({
     return d.toISOString().slice(0, 10);
   }
 
-  /** Sábado anterior a uma data de domingo — espelho de domingoSeguinte, pro mesmo par de fim de semana visto a partir do domingo. */
-  function sabadoAnterior(data: string) {
-    const d = new Date(data);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
-  }
-
-  /** Monta um DiaInfo a partir de uma data "YYYY-MM-DD" sem depender de ela estar na lista `dias` do mês em tela — usado só na exportação, pro parceiro de fim de semana do mês vizinho (ex.: domingo 01/11 ao lado do sábado 31/10). */
-  function diaInfoDeData(data: string): DiaInfo {
-    const d = new Date(data);
-    return { data, dia: d.getUTCDate(), diaSemana: d.getUTCDay() };
-  }
-
   /** Atualiza o estado local — e, se for sábado de uma função que também vale no domingo, espelha no domingo também (o servidor já faz essa cópia; aqui é só pra tela não esperar um reload pra mostrar). Não vale pras funções em FUNCOES_SEM_REPETICAO_DOMINGO. */
   function applyLocalChange(data: string, funcaoId: string, value: string) {
     setAtribuicoes((old) => {
@@ -273,6 +237,12 @@ export default function EscalaBoard({
       }
       return next;
     });
+  }
+
+  function mostrarAviso(tipo: "sucesso" | "erro", texto: string) {
+    if (avisoTimer.current) clearTimeout(avisoTimer.current);
+    setAviso({ tipo, texto });
+    avisoTimer.current = setTimeout(() => setAviso(null), tipo === "erro" ? 6000 : 3000);
   }
 
   /**
@@ -298,12 +268,21 @@ export default function EscalaBoard({
         const tentativa = (tentativasErro.current[key] ?? 0) + 1;
         tentativasErro.current[key] = tentativa;
         const espera = Math.min(2000 * tentativa, 10000);
-        saveTimers.current[key] = setTimeout(() => commitComRetry(key, salvar), espera);
+        saveTimers.current[key] = setTimeout(() => {
+          delete saveTimers.current[key];
+          commitComRetry(key, salvar);
+        }, espera);
       });
+  }
+
+  function valorEnviado(data: string, funcaoId: string) {
+    const key = `${data}:${funcaoId}`;
+    return key in ultimoEnviado.current ? ultimoEnviado.current[key] : normalizar(atribuicoesIniciais[data]?.[funcaoId]);
   }
 
   function commitSave(data: string, funcaoId: string, nome: string | null) {
     const key = `${data}:${funcaoId}`;
+    ultimoEnviado.current[key] = normalizar(nome);
     commitComRetry(key, () => definirAtribuicao(data, funcaoId, nome));
   }
 
@@ -321,7 +300,8 @@ export default function EscalaBoard({
 
   function handleBlurCommit(data: string, funcaoId: string, value: string) {
     const key = `${data}:${funcaoId}`;
-    if (saveTimers.current[key]) {
+    const tinhaPendente = Boolean(saveTimers.current[key]);
+    if (tinhaPendente) {
       clearTimeout(saveTimers.current[key]);
       delete saveTimers.current[key];
     }
@@ -329,6 +309,7 @@ export default function EscalaBoard({
     // sair do campo, sem esperar o servidor/reload pra mostrar certo.
     const maiuscula = value.trim().toUpperCase();
     if (maiuscula !== value) applyLocalChange(data, funcaoId, maiuscula);
+    if (!tinhaPendente && maiuscula === valorEnviado(data, funcaoId)) return;
     commitSave(data, funcaoId, maiuscula);
   }
 
@@ -349,10 +330,9 @@ export default function EscalaBoard({
   }
 
   function handleObsBlur(data: string, value: string) {
-    if (obsTimers.current[data]) {
-      clearTimeout(obsTimers.current[data]);
-      delete obsTimers.current[data];
-    }
+    if (!obsTimers.current[data]) return;
+    clearTimeout(obsTimers.current[data]);
+    delete obsTimers.current[data];
     commitObservacao(data, value);
   }
 
@@ -366,230 +346,9 @@ export default function EscalaBoard({
     setAtividades((old) => ({ ...old, [data]: novas }));
   }
 
-  function renderCard(data: string, dia: number, diaSemana: number) {
-    const categoriasCard = categoriasDoDia(diaSemana);
-    const totalCard = categoriasCard.reduce((n, c) => n + c.funcoes.length, 0);
-    const faltando = missingList(data, diaSemana);
-    const filled = totalCard - faltando.length;
-    const completa = totalCard > 0 && faltando.length === 0;
-
-    return (
-      <div key={data} className="card !p-3.5">
-        <div className="mb-2 flex items-center gap-2.5">
-          <div className="flex h-10 w-10 flex-none flex-col items-center justify-center rounded-[10px] bg-orange-50 font-heading font-extrabold text-orange-600">
-            <span className="text-[15px] leading-none tabular-nums">{String(dia).padStart(2, "0")}</span>
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-[13.5px] font-bold text-ink-900">{nomeDiaSemana(diaSemana)}</span>
-            <span className="text-[11.5px] tabular-nums text-ink-400">
-              {fmtDDMM(ano, mes, dia)}/{ano}
-            </span>
-          </div>
-          {totalCard > 0 && (
-            <span
-              className={
-                "ml-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums " +
-                (completa ? "bg-green-50 text-green-600" : "bg-ink-900/5 text-ink-400")
-              }
-            >
-              {completa ? "Completa" : `${filled}/${totalCard}`}
-            </span>
-          )}
-          {showExport && (
-            <button
-              type="button"
-              title="Gerar PDF desta escala"
-              onClick={() => handleAbrirModalExport({ data, dia, diaSemana })}
-              className="flex-none rounded-md p-1 text-[15px] text-ink-400 hover:bg-brand-50 hover:text-orange-600"
-            >
-              🖨️
-            </button>
-          )}
-        </div>
-
-        {(diaSemana === 6 || diaSemana === 0) && (isAdmin || ministeriosResponsaveis[data]) && (
-          <div className="mb-2.5 flex items-center gap-2 border-b border-brand-100 pb-2">
-            <span className="text-[11px] font-semibold text-ink-600">🏛️</span>
-            {isAdmin ? (
-              <select
-                value={ministeriosResponsaveis[data] ?? ""}
-                onChange={(e) => handleMinisterioResponsavelChange(data, e.target.value)}
-                className="flex-1 rounded-md border border-brand-200 bg-white px-2 py-1 text-[11px] font-semibold text-ink-900 outline-none focus:border-orange-500"
-              >
-                <option value="">Ministério responsável — selecionar</option>
-                {MINISTERIOS_RESPONSAVEIS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="badge-neutral">{ministeriosResponsaveis[data]}</span>
-            )}
-          </div>
-        )}
-
-        {categoriasCard.length === 0 && (
-          <p className="text-[11.5px] text-ink-400">
-            {!temAlgumaFuncao
-              ? "Cadastre ministérios e funções em Pessoas."
-              : isAdmin
-                ? "Nenhuma função vale para este dia."
-                : "Nenhuma função foi atribuída ao seu login ainda (ou nenhuma das suas vale neste dia)."}
-          </p>
-        )}
-
-        {categoriasCard.map((cat) => {
-          if (cat.funcoes.length === 0) return null;
-          return (
-            <div key={cat.id} className="mb-0.5">
-              <div className="mt-2 mb-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-ink-400 first:mt-0">
-                {emojiMinisterio(cat.nome)} {cat.nome}
-              </div>
-              {cat.funcoes.map((f) => {
-                const valor = atribuicoes[data]?.[f.id] ?? "";
-                const preenchido = valor.trim().length > 0;
-                const souEu = isAdmin ? false : currentUser.funcaoIds.includes(f.id);
-                const editavel = isAdmin || souEu;
-
-                return (
-                  <div key={f.id} className="leader-row">
-                    <span className="leader-label" title={labelFuncao(f.nome, diaSemana)}>
-                      {emojiFuncao(f.nome)} {labelFuncao(f.nome, diaSemana)}
-                    </span>
-                    <span className="leader-fill" />
-                    {editavel ? (
-                      <input
-                        type="text"
-                        placeholder="Digite o nome..."
-                        value={valor}
-                        onChange={(e) => handleTextChange(data, f.id, e.target.value)}
-                        onBlur={(e) => handleBlurCommit(data, f.id, e.target.value)}
-                        list={pessoasCadastradas && pessoasCadastradas.length > 0 ? "pessoas-cadastradas" : undefined}
-                        className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold uppercase text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:normal-case placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
-                      />
-                    ) : (
-                      <span className="max-w-[48%] flex-none truncate text-right text-[12px] font-semibold uppercase text-ink-400">
-                        {valor.trim() || "—"}
-                      </span>
-                    )}
-                    <span
-                      className={"flex-none text-[13px] " + (preenchido ? "" : "opacity-70")}
-                      title={preenchido ? "Preenchido" : "Sem responsável"}
-                    >
-                      {preenchido ? "✅" : "⚠️"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-
-        {(isAdmin || (observacoes[data] ?? "").trim()) && (
-          <div className="mt-2.5 border-t border-brand-100 pt-2">
-            {isAdmin ? (
-              <textarea
-                rows={2}
-                placeholder="📝 Observação (ex: também teremos culto à noite às 19h)..."
-                value={observacoes[data] ?? ""}
-                onChange={(e) => handleObsChange(data, e.target.value)}
-                onBlur={(e) => handleObsBlur(data, e.target.value)}
-                className="w-full resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[11.5px] leading-snug text-ink-600 outline-none placeholder:italic placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
-              />
-            ) : (
-              <p className="px-1.5 text-[11.5px] leading-snug text-ink-600">📝 {observacoes[data]}</p>
-            )}
-          </div>
-        )}
-
-        <AtividadesDoDia
-          data={data}
-          atividades={atividades[data] ?? []}
-          onChange={(novas) => handleAtividadesChange(data, novas)}
-          isAdmin={isAdmin}
-        />
-      </div>
-    );
-  }
-
-  const diasDoMes = useMemo(() => buildMonthDaysFlat(ano, mes), [ano, mes]);
-  const cultosCompletos = temAlgumaFuncao
-    ? diasDoMes.filter((d) => missingList(d.data, d.diaSemana).length === 0).length
-    : 0;
-
-  /** Abre o modal "Selecionar conteúdo da escala" — a exportação de verdade só começa depois de confirmar lá. Seleção sempre começa com tudo marcado, nunca herda a de uma exportação anterior. */
-  function handleAbrirModalExport(alvo: PrintTarget) {
-    setSelecaoExport(Object.fromEntries(todasFuncaoIdsExport.map((id) => [id, true])));
-    setCategoriasExpandidas({});
-    setErroSelecaoExport(null);
-    setModalExportAlvo(alvo);
-  }
-
-  function handleConfirmarSelecaoExport(acao: "preview" | "baixar") {
-    const temAlgumaSelecionada = todasFuncaoIdsExport.some((id) => isSelecionadaExport(id));
-    if (!temAlgumaSelecionada) {
-      setErroSelecaoExport("Selecione pelo menos uma categoria ou função para gerar a escala.");
-      return;
-    }
-    const alvo = modalExportAlvo;
-    setModalExportAlvo(null);
-    if (alvo) handleExportClick(alvo, acao);
-  }
-
-  function finalizarExport(alvo: PrintTarget, acao: "preview" | "baixar") {
-    setPrintTarget(alvo);
-    if (acao === "preview") {
-      setPreviewAberto(true);
-    } else {
-      setTimeout(() => window.print(), 30);
-    }
-  }
-
-  function handleExportClick(alvo: PrintTarget, acao: "preview" | "baixar" = "baixar") {
-    if (!temAlgumaFuncao) {
-      finalizarExport(alvo, acao);
-      return;
-    }
-    const diasParaChecar = alvo === "mes" ? diasDoMes : [alvo];
-    const pendentes = diasParaChecar
-      .map((d) => ({ ...d, faltando: missingListExport(d.data, d.diaSemana) }))
-      .filter((d) => d.faltando.length > 0);
-
-    if (pendentes.length > 0) {
-      setConfirmando({ alvo, acao, pendentes });
-    } else {
-      finalizarExport(alvo, acao);
-    }
-  }
-
-  /** Monta e abre uma mensagem de WhatsApp com a escala do mês inteiro (como vocês costumam enviar), um culto após o outro. */
-  function handleCompartilharMesWhatsapp() {
-    const linhas: string[] = [`📋 *Escala — ${nomeMes(mes)} de ${ano}*`, ""];
-    for (const d of diasDoMes) {
-      const categoriasDia = categoriasDoDia(d.diaSemana);
-      if (categoriasDia.length === 0) continue;
-
-      linhas.push(`*${nomeDiaSemana(d.diaSemana)} · ${fmtDDMM(ano, mes, d.dia)}*`);
-      const ministerio = ministeriosResponsaveis[d.data];
-      if (ministerio) linhas.push(`🏛️ ${ministerio}`);
-      for (const cat of categoriasDia) {
-        for (const f of cat.funcoes) {
-          const nome = (atribuicoes[d.data]?.[f.id] ?? "").trim();
-          linhas.push(`${emojiFuncao(f.nome)} ${labelFuncao(f.nome, d.diaSemana)}: ${nome || "❌ (pendente)"}`);
-        }
-      }
-      const nota = (observacoes[d.data] ?? "").trim();
-      if (nota) linhas.push(`📝 ${nota}`);
-      linhas.push("");
-    }
-    const texto = linhas.join("\n");
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
-  }
-
-  /** Botão "Salvar": força o commit imediato de tudo que ainda estava esperando o debounce e avisa com um toast. */
+  /** Botão "Salvar": força o commit imediato de tudo que ainda estava esperando o debounce. */
   async function handleSalvarTudo() {
-    const pendentes = Object.entries(saveTimers.current);
+    const pendentes = Object.entries(saveTimers.current).filter(([key]) => !key.startsWith("min:") && !key.startsWith("obs:"));
     for (const [key, timer] of pendentes) {
       clearTimeout(timer);
       delete saveTimers.current[key];
@@ -606,265 +365,272 @@ export default function EscalaBoard({
       await Promise.all([
         ...pendentes.map(([key]) => {
           const [data, funcaoId] = key.split(":");
-          const valor = (atribuicoes[data]?.[funcaoId] ?? "").trim().toUpperCase();
+          const valor = normalizar(atribuicoes[data]?.[funcaoId]);
+          ultimoEnviado.current[key] = valor;
           return definirAtribuicao(data, funcaoId, valor || null);
         }),
         ...pendentesObs.map(([data]) => definirObservacao(data, observacoes[data] ?? "")),
       ]);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      setToast("Escala salva com sucesso! ✅");
-      toastTimer.current = setTimeout(() => setToast(null), 3000);
-      setSaveStatus("salvo");
+      mostrarAviso("sucesso", "Escala salva");
+      if (inflightRef.current === 0) {
+        setSaveStatus("salvo");
+        setUltimoSalvamento(new Date());
+      }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Não foi possível salvar tudo.");
+      mostrarAviso("erro", e instanceof Error ? e.message : "Não foi possível salvar tudo.");
+      setSaveStatus("erro");
     } finally {
       setSalvandoTudo(false);
     }
   }
 
-  /** Usada só na exportação — além do dia da semana, respeita o que foi escolhido no modal "Selecionar conteúdo da escala". */
-  function categoriasDoDiaCompleto(diaSemana: number) {
-    return categorias
-      .map((c) => ({
-        ...c,
-        funcoes: c.funcoes.filter((f) => f.diasSemana.includes(diaSemana) && isSelecionadaExport(f.id)),
-      }))
-      .filter((c) => c.funcoes.length > 0);
-  }
+  // ---- exportação: PDF e WhatsApp a partir das datas escolhidas ----
 
-  /** Mesma ideia de missingList, mas só considera o que foi selecionado pra exportar (pra não avisar de função que o usuário excluiu de propósito). */
-  function missingListExport(data: string, diaSemana: number) {
-    const out: string[] = [];
-    for (const cat of categoriasDoDiaCompleto(diaSemana)) {
-      for (const f of cat.funcoes) {
-        if (!atribuicoes[data]?.[f.id]?.trim()) out.push(labelFuncao(f.nome, diaSemana));
-      }
+  const dadosEscala: DadosEscala = {
+    categorias,
+    atribuicoes,
+    observacoes,
+    ministerios: ministeriosResponsaveis,
+    atividades,
+  };
+
+  const progressoExport = useMemo(() => {
+    const out: Record<string, { preenchidas: number; total: number }> = {};
+    for (const c of cultosExport) {
+      const funcoes = categorias.flatMap((cat) => cat.funcoes.filter((f) => f.diasSemana.includes(c.diaSemana)));
+      out[c.data] = {
+        total: funcoes.length,
+        preenchidas: funcoes.filter((f) => (atribuicoes[c.data]?.[f.id] ?? "").trim()).length,
+      };
     }
     return out;
+  }, [cultosExport, categorias, atribuicoes]);
+
+  function conteudoDoSeletor(): ConteudoExportacao {
+    if (funcoesExcluidas.size === 0) return { funcoes: null, incluirAtividades };
+    const incluidas = categorias.flatMap((c) => c.funcoes.map((f) => f.id)).filter((id) => !funcoesExcluidas.has(id));
+    return { funcoes: new Set(incluidas), incluirAtividades };
+  }
+
+  function executar(acao: AcaoExportacao, exp: Exportacao) {
+    if (exp.datas.length === 0) return;
+    if (acao === "whatsapp") {
+      const texto = mensagemWhatsapp(dadosEscala, exp.datas, exp.conteudo, ano, mes);
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const dias = [...exp.datas]
+      .sort()
+      .map((data) => ({ data, faltando: pendenciasDoDia(dadosEscala, data, exp.conteudo) }))
+      .filter((d) => d.faltando.length > 0);
+    if (dias.length > 0) {
+      setPendentesExport({ exp, acao, dias });
+      return;
+    }
+    gerarPdf(exp, acao);
+  }
+
+  function gerarPdf(exp: Exportacao, acao: "baixar" | "visualizar") {
+    setExportacao(exp);
+    if (acao === "visualizar") setPreviewAberto(true);
+    else imprimir(exp);
   }
 
   /**
-   * Encontra o outro dia do mesmo fim de semana (sábado <-> domingo seguinte)
-   * — usado só na exportação. Diferente de `fdsPares` (tela normal, só olha
-   * dentro do mês em exibição), aqui o parceiro é sempre sintetizado mesmo
-   * quando cai no mês vizinho: um fim de semana nunca aparece partido no PDF
-   * só porque atravessou a virada do mês.
+   * Imprime só o documento: o bloco de impressão existe apenas durante a
+   * impressão (some no "afterprint"), então nunca se mistura com a impressão
+   * de uma escala extraordinária. O título da aba vira o nome sugerido do PDF.
    */
-  function encontrarParDeFds(item: DiaInfo): { sab: DiaInfo; dom: DiaInfo } | null {
-    if (item.diaSemana === 6) {
-      const domStr = domingoSeguinte(item.data);
-      const dom = dias.dom.find((d) => d.data === domStr) ?? diaInfoDeData(domStr);
-      return { sab: item, dom };
-    }
-    if (item.diaSemana === 0) {
-      const sabStr = sabadoAnterior(item.data);
-      const sab = dias.sab.find((s) => s.data === sabStr) ?? diaInfoDeData(sabStr);
-      return { sab, dom: item };
-    }
-    return null;
+  function imprimir(exp: Exportacao) {
+    setExportacao(exp);
+    setImprimindo(true);
+    abrirImpressao(cabecalhoDocumento(exp.datas, ano, mes).nomeArquivo, () => setImprimindo(false));
   }
 
-  type LinhaTabela = { tipo: "fds"; sab: DiaInfo | null; dom: DiaInfo | null } | { tipo: "qua"; dia: DiaInfo };
-
-  /**
-   * Pares de fim de semana pra exportação — mesma ideia de `fdsPares`, mas
-   * sem se limitar aos dias do mês em tela: o sábado sempre busca o domingo
-   * seguinte (mesmo que seja do mês seguinte) e um domingo órfão no início do
-   * mês busca o sábado anterior (mesmo que seja do mês anterior).
-   */
-  function construirParesFdsExport(): ParFds[] {
-    const domPorData = new Map(dias.dom.map((d) => [d.data, d]));
-    const usados = new Set<string>();
-    const pares: ParFds[] = [];
-    for (const s of dias.sab) {
-      const domStr = domingoSeguinte(s.data);
-      const dom = domPorData.get(domStr) ?? diaInfoDeData(domStr);
-      usados.add(dom.data);
-      pares.push({ sab: s, dom });
-    }
-    for (const d of dias.dom) {
-      if (usados.has(d.data)) continue;
-      pares.push({ sab: diaInfoDeData(sabadoAnterior(d.data)), dom: d });
-    }
-    return pares.sort((a, b) => {
-      const da = (a.sab ?? a.dom)!.data;
-      const db = (b.sab ?? b.dom)!.data;
-      return da < db ? -1 : da > db ? 1 : 0;
-    });
+  function confirmarSeletor(acao: AcaoExportacao) {
+    const exp: Exportacao = { datas: [...datasSelecionadas], conteudo: conteudoDoSeletor() };
+    setSeletorAberto(null);
+    executar(acao, exp);
   }
 
-  /** Todas as linhas do mês (fim de semana + quarta), em ordem cronológica — base da exportação. */
-  function construirLinhasTabela(): LinhaTabela[] {
-    const linhas: LinhaTabela[] = [
-      ...construirParesFdsExport().map((par): LinhaTabela => ({ tipo: "fds", sab: par.sab, dom: par.dom })),
-      ...dias.qua.map((d): LinhaTabela => ({ tipo: "qua", dia: d })),
+  /** Ações do menu de cada card — sempre só aquele culto (ou aquele fim de semana), com todas as funções. */
+  function acoesDoCulto(data: string, diaSemana: number) {
+    const so = { datas: [data], conteudo: CONTEUDO_COMPLETO };
+    const itens: ItemMenu[] = [
+      { rotulo: "Baixar PDF deste culto", icone: "download", onSelect: () => executar("baixar", so) },
+      { rotulo: "Visualizar PDF", icone: "eye", onSelect: () => executar("visualizar", so) },
+      { rotulo: "Enviar no WhatsApp", icone: "message", onSelect: () => executar("whatsapp", so) },
     ];
-    return linhas.sort((a, b) => {
-      const da = a.tipo === "fds" ? (a.sab ?? a.dom)!.data : a.dia.data;
-      const db = b.tipo === "fds" ? (b.sab ?? b.dom)!.data : b.dia.data;
-      return da < db ? -1 : da > db ? 1 : 0;
-    });
-  }
-
-  /** Uma única linha, pro PDF de um culto/fim de semana específico (em vez do mês inteiro). */
-  function linhaParaAlvo(alvo: DiaInfo): LinhaTabela {
-    if (alvo.diaSemana === 3) return { tipo: "qua", dia: alvo };
-    const par = encontrarParDeFds(alvo);
-    if (par) return { tipo: "fds", sab: par.sab, dom: par.dom };
-    return alvo.diaSemana === 6 ? { tipo: "fds", sab: alvo, dom: null } : { tipo: "fds", sab: null, dom: alvo };
-  }
-
-  function valorFuncao(data: string | null, funcaoId: string) {
-    if (!data) return "";
-    return (atribuicoes[data]?.[funcaoId] ?? "").trim();
-  }
-
-  /**
-   * Lista plana de função+valor pra um dia específico — já filtrada pelo dia
-   * da semana, pela seleção do modal de exportação e por quem tem alguém
-   * escalado (função vazia nem aparece). `nome` é o nome real da função (pra
-   * identificar o emoji certo) e `label` é o rótulo a exibir — igual ao
-   * `nome`, exceto na quarta-feira, onde "Palavra Pastoral" vira "Apoio".
-   */
-  function funcoesDoDiaCard(dia: DiaInfo): { id: string; nome: string; label: string; valor: string }[] {
-    const out: { id: string; nome: string; label: string; valor: string }[] = [];
-    for (const cat of categorias) {
-      for (const f of cat.funcoes) {
-        if (!f.diasSemana.includes(dia.diaSemana) || !isSelecionadaExport(f.id)) continue;
-        const valor = valorFuncao(dia.data, f.id);
-        if (valor) out.push({ id: f.id, nome: f.nome, label: labelFuncao(f.nome, dia.diaSemana), valor });
-      }
+    if (diaSemana === 6 || diaSemana === 0) {
+      const sab = diaSemana === 6 ? data : addDiasIso(data, -1);
+      const fds = { datas: [sab, addDiasIso(sab, 1)], conteudo: CONTEUDO_COMPLETO };
+      itens.push({
+        rotulo: "PDF do fim de semana",
+        icone: "file",
+        onSelect: () => executar("baixar", fds),
+      });
     }
-    return out;
+    return showExport ? itens : [];
   }
 
-  /** Observação + ministério responsável + atividades adicionais de um dia — vira a seção "Atividades do dia", visualmente separada das funções no card. */
-  function notasDoDiaCard(dia: DiaInfo): string[] {
-    const partes: string[] = [];
-    const ministerio = ministeriosResponsaveis[dia.data];
-    if (ministerio) partes.push(`🏛️ ${ministerio}`);
-    const nota = (observacoes[dia.data] ?? "").trim();
-    if (nota) partes.push(`📝 ${nota}`);
-    if (incluirAtividadesExport) {
-      for (const a of atividades[dia.data] ?? []) {
-        partes.push(`${a.horario ? `${a.horario} — ` : ""}${a.titulo}${a.ministerio ? ` / ${a.ministerio}` : ""}`);
-      }
-    }
-    return partes;
+  function addDiasIso(data: string, delta: number) {
+    const d = new Date(data);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
   }
 
-  /**
-   * Um card por dia — faixa colorida vertical (dia da semana + número grande +
-   * mês) à esquerda, quadro escuro com as funções (e, se houver, as
-   * atividades do dia) à direita. Função sem ninguém escalado não aparece —
-   * nem um placeholder.
-   */
-  function renderDiaCard(dia: DiaInfo) {
-    const funcoes = funcoesDoDiaCard(dia);
-    const notas = notasDoDiaCard(dia);
-    const corFaixa = dia.diaSemana === 0 ? "bg-pdforange" : "bg-pdfblue";
-    // O mês da faixa vem da própria data do dia (não do mês selecionado no board) — um
-    // parceiro de fim de semana do mês vizinho precisa mostrar o mês certo (ex.: NOV, não OUT).
-    const mesDoDia = new Date(dia.data).getUTCMonth();
+  // ---- render ----
+
+  const confirmacoes = confirmacoesIniciais ?? {};
+
+  function renderCard({ data, diaSemana }: DiaInfo) {
+    const categoriasCard = categoriasDoDia(diaSemana);
+    const totalCard = categoriasCard.reduce((n, c) => n + c.funcoes.length, 0);
+    const faltando = missingList(data, diaSemana);
+    const ehFds = diaSemana === 6 || diaSemana === 0;
+    const ministerio = ministeriosResponsaveis[data] ?? "";
+    const obs = observacoes[data] ?? "";
+    const temRodape = isAdmin || obs.trim() || (atividades[data] ?? []).length > 0;
 
     return (
-      <div key={dia.data} className="flex overflow-hidden rounded-xl">
-        <div className={`flex w-[72px] flex-none flex-col items-center justify-center gap-1 py-4 text-white ${corFaixa}`}>
-          <span className="text-[8.5px] font-bold uppercase tracking-wide">{nomeDiaSemana(dia.diaSemana)}</span>
-          <span className="font-heading text-[26px] font-extrabold leading-none">{String(dia.dia).padStart(2, "0")}</span>
-          <span className="text-[8.5px] font-bold uppercase tracking-wide">{nomeMesAbrev(mesDoDia)}</span>
-        </div>
-        <div className="flex flex-1 flex-col justify-center gap-0 bg-pdfdark px-3.5 py-3">
-          {funcoes.length === 0 && notas.length === 0 ? (
-            <span className="text-[10px] italic text-white/40">Sem escala definida</span>
-          ) : (
-            <>
-              {funcoes.map((f, i) => (
-                <div key={f.id} className={`py-1.5 text-center ${i > 0 ? "border-t border-white/10" : ""}`}>
-                  <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-white">
-                    {emojiFuncao(f.nome)} {f.label}
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-semibold uppercase leading-snug text-white/70">{f.valor}</div>
-                </div>
-              ))}
-              {notas.length > 0 && (
-                <div className={funcoes.length > 0 ? "mt-1.5 border-t border-white/15 pt-1.5" : ""}>
-                  <span className="mb-1 block text-[7px] font-extrabold uppercase tracking-[0.15em] text-pdforange">
-                    Atividades do dia
-                  </span>
-                  <div className="flex flex-col gap-0.5">
-                    {notas.map((n, i) => (
-                      <span key={i} className="text-[8.5px] italic leading-tight text-white/75">
-                        {n}
-                      </span>
+      <CultoCard
+        key={data}
+        data={data}
+        diaSemana={diaSemana}
+        preenchidas={totalCard - faltando.length}
+        total={totalCard}
+        acoes={acoesDoCulto(data, diaSemana)}
+        responsavel={
+          ehFds && (isAdmin || ministerio) ? (
+            <label className="flex items-center gap-2.5 rounded-[10px] bg-paper px-3 py-1.5">
+              <Icon name="building" size={16} className="text-ink-400" />
+              <span className="text-[12px] whitespace-nowrap text-ink-500">Responsável</span>
+              {isAdmin ? (
+                <span className="relative min-w-0 flex-1">
+                  <select
+                    value={ministerio}
+                    onChange={(e) => handleMinisterioResponsavelChange(data, e.target.value)}
+                    className={
+                      "h-8 w-full cursor-pointer appearance-none truncate rounded-[7px] bg-transparent pr-6 pl-1.5 text-[16px] font-semibold outline-none hover:bg-ink-100 focus-visible:ring-3 focus-visible:ring-brand-100 sm:text-[12.5px] " +
+                      (ministerio ? "text-ink-900" : "font-normal text-ink-400")
+                    }
+                  >
+                    <option value="">Selecionar ministério</option>
+                    {MINISTERIOS_RESPONSAVEIS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                  <Icon
+                    name="chevronDown"
+                    size={14}
+                    className="pointer-events-none absolute top-1/2 right-1.5 -translate-y-1/2 text-ink-400"
+                  />
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink-900">{ministerio}</span>
+              )}
+            </label>
+          ) : undefined
+        }
+        rodape={
+          temRodape ? (
+            <div className="flex flex-col gap-2.5">
+              {(isAdmin || obs.trim()) && (
+                <div className="flex items-start gap-2.5">
+                  <Icon name="note" size={16} className="mt-[7px] text-ink-400" />
+                  {isAdmin ? (
+                    <textarea
+                      rows={1}
+                      placeholder="Observação do culto (ex.: também teremos culto à noite às 19h)"
+                      value={obs}
+                      onChange={(e) => handleObsChange(data, e.target.value)}
+                      onBlur={(e) => handleObsBlur(data, e.target.value)}
+                      aria-label="Observação do culto"
+                      className="field-sizing-content min-h-8 w-full resize-none rounded-[8px] border border-transparent bg-transparent px-2 py-1.5 text-[16px] leading-snug text-ink-700 outline-none placeholder:text-ink-400 hover:bg-white focus:border-brand-600 focus:bg-white focus:ring-3 focus:ring-brand-100 sm:text-[13px]"
+                    />
+                  ) : (
+                    <p className="py-1.5 text-[13px] leading-snug text-ink-700">{obs}</p>
+                  )}
                 </div>
               )}
-            </>
-          )}
-        </div>
-      </div>
+              <AtividadesDoDia
+                data={data}
+                atividades={atividades[data] ?? []}
+                onChange={(novas) => handleAtividadesChange(data, novas)}
+                isAdmin={isAdmin}
+              />
+            </div>
+          ) : undefined
+        }
+      >
+        {categoriasCard.length === 0 ? (
+          <p className="py-1 text-[13px] text-ink-500">
+            {!temAlgumaFuncao
+              ? "Cadastre ministérios e funções em Pessoas."
+              : isAdmin
+                ? "Nenhuma função vale para este dia."
+                : "Nenhuma função foi atribuída ao seu login ainda (ou nenhuma das suas vale neste dia)."}
+          </p>
+        ) : (
+          categoriasCard.map((cat) => (
+            <div key={cat.id} className="pt-3.5 first:pt-0">
+              <DivisorMinisterio nome={cat.nome} />
+              {cat.funcoes.map((f) => {
+                const valor = atribuicoes[data]?.[f.id] ?? "";
+                const editavel = isAdmin || currentUser.funcaoIds.includes(f.id);
+                // Status só vale enquanto o nome continua o mesmo que veio do servidor — editar o nome volta pra "aguardando".
+                const status =
+                  normalizar(valor) === normalizar(atribuicoesIniciais[data]?.[f.id])
+                    ? (confirmacoes[data]?.[f.id] ?? null)
+                    : null;
+                return (
+                  <FuncaoLinha
+                    key={f.id}
+                    label={labelFuncao(f.nome, diaSemana)}
+                    valor={valor}
+                    editavel={editavel}
+                    onChange={(v) => handleTextChange(data, f.id, v)}
+                    onBlur={(v) => handleBlurCommit(data, f.id, v)}
+                    listaSugestoes={pessoasCadastradas && pessoasCadastradas.length > 0 ? "pessoas-cadastradas" : undefined}
+                    status={status}
+                  />
+                );
+              })}
+            </div>
+          ))
+        )}
+      </CultoCard>
     );
   }
 
-  /** Uma linha da exportação — fim de semana sempre em 2 cards lado a lado; quarta sozinha, centralizada, num card de meia largura (nunca estica a linha inteira). */
-  function renderLinhaCards(linha: LinhaTabela) {
-    if (linha.tipo === "qua") {
-      return (
-        <div key={linha.dia.data} className="mb-3 flex justify-center break-inside-avoid">
-          <div className="w-1/2">{renderDiaCard(linha.dia)}</div>
-        </div>
-      );
-    }
-    const { sab, dom } = linha;
-    const chave = (sab ?? dom)!.data;
-    return (
-      <div key={chave} className="mb-3 grid grid-cols-2 gap-3 break-inside-avoid">
-        {sab ? renderDiaCard(sab) : <div />}
-        {dom ? renderDiaCard(dom) : <div />}
-      </div>
-    );
-  }
+  const diasDoMes = useMemo(() => buildMonthDaysFlat(ano, mes), [ano, mes]);
+  const resumoMes = diasDoMes.reduce(
+    (acc, d) => {
+      const total = categoriasDoDia(d.diaSemana).reduce((n, c) => n + c.funcoes.length, 0);
+      const faltando = missingList(d.data, d.diaSemana).length;
+      acc.funcoes += total;
+      acc.preenchidas += total - faltando;
+      if (total > 0 && faltando === 0) acc.completos++;
+      return acc;
+    },
+    { funcoes: 0, preenchidas: 0, completos: 0 }
+  );
+  const pctMes = resumoMes.funcoes > 0 ? Math.round((resumoMes.preenchidas / resumoMes.funcoes) * 100) : 0;
+  const hora = ultimoSalvamento?.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-  /** Título adaptativo do cabeçalho — mês inteiro, fim de semana específico ou culto de quarta específico. */
-  function tituloExport(): string {
-    if (printTarget === "mes") return nomeMes(mes).toUpperCase();
-    if (printTarget && printTarget.diaSemana === 3) return "CULTO DE QUARTA-FEIRA";
-    return "FIM DE SEMANA";
-  }
+  const estadoSalvamento = {
+    idle: { icone: <Icon name="checkCircle" size={15} />, texto: "Salvamento automático", cor: "text-ink-500" },
+    digitando: { icone: <Icon name="note" size={15} />, texto: "Alterações pendentes…", cor: "text-ink-500" },
+    salvando: { icone: <Spinner size={14} />, texto: "Salvando…", cor: "text-ink-600" },
+    salvo: { icone: <Icon name="checkCircle" size={15} />, texto: hora ? `Salvo às ${hora}` : "Salvo", cor: "text-green-700" },
+    erro: { icone: <Icon name="alert" size={15} />, texto: "Erro ao salvar — tentando de novo", cor: "text-red-600" },
+  }[saveStatus];
 
-  /**
-   * Conteúdo do PDF — usado tanto no bloco escondido que vira a impressão
-   * real quanto dentro do modal de pré-visualização. É a MESMA função
-   * chamada nos dois lugares, então o que o admin vê no "Visualizar" é
-   * exatamente o que sai no "Baixar PDF" — não existem dois componentes
-   * divergentes.
-   */
-  function renderPrintContent() {
-    if (!printTarget) return null;
-    const linhas = printTarget === "mes" ? construirLinhasTabela() : [linhaParaAlvo(printTarget)];
-
-    return (
-      <div>
-        <div className="mb-6 border-y-2 border-pdfblue px-4 py-3 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-[0.35em] text-pdforange">Escala de</div>
-          <div className="font-heading text-[28px] font-extrabold uppercase tracking-wide text-pdfblue">
-            {tituloExport()}
-          </div>
-          <div className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">
-            Promessa Vila Camargo · {nomeMes(mes)} {ano}
-          </div>
-        </div>
-
-        <div>{linhas.map((linha) => renderLinhaCards(linha))}</div>
-
-        <div className="mt-4 border-t border-pdfgray pt-2 text-center text-[9px] text-ink-400">
-          Escala · Promessa Vila Camargo · gerado em {new Date().toLocaleDateString("pt-BR")}
-        </div>
-      </div>
-    );
-  }
+  const docPreview = exportacao && (
+    <DocumentoEscala dados={dadosEscala} datas={exportacao.datas} conteudo={exportacao.conteudo} ano={ano} mes={mes} />
+  );
 
   return (
     <div>
@@ -875,258 +641,324 @@ export default function EscalaBoard({
           ))}
         </datalist>
       )}
-      <div className="no-print mb-4 flex flex-wrap items-center gap-3">
-        <div className="mr-auto flex flex-wrap items-center gap-3">
-          {saveStatus !== "idle" && (
-            <span className="flex items-center gap-1.5 text-[12.5px] font-semibold">
-              {saveStatus === "digitando" && <span className="text-ink-400">✏️ Digitando...</span>}
-              {saveStatus === "salvando" && <span className="text-ink-400">⏳ Salvando...</span>}
-              {saveStatus === "salvo" && <span className="text-green-600">✓ Salvo automaticamente</span>}
-              {saveStatus === "erro" && (
-                <span className="text-orange-600">⚠️ Não foi possível salvar. Tentando novamente...</span>
-              )}
-            </span>
-          )}
-          {showExport && temAlgumaFuncao && (
-            <span className="text-[12.5px] font-semibold text-ink-400">
-              <b className="text-ink-600">{diasDoMes.length}</b> culto(s) neste mês ·{" "}
-              <b className="text-ink-600">{cultosCompletos}</b> completo(s)
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={handleSalvarTudo}
-          disabled={salvandoTudo}
-          className={showExport ? "btn-secondary" : "btn-primary"}
-        >
-          {salvandoTudo ? "Salvando..." : "💾 Salvar"}
-        </button>
-        {showExport && (
-          <button type="button" onClick={handleCompartilharMesWhatsapp} className="btn-secondary">
-            📲 Compartilhar mês no WhatsApp
-          </button>
-        )}
-        {showExport && (
-          <button type="button" onClick={() => handleAbrirModalExport("mes")} className="btn-primary">
-            📄 Exportar PDF do mês
-          </button>
-        )}
-      </div>
 
-      {modalExportAlvo && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-5">
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lift">
-            <div className="border-b border-brand-100 px-6 py-4">
-              <h3 className="font-heading text-base font-extrabold text-ink-900">Selecionar conteúdo da escala</h3>
-              <p className="mt-0.5 text-[12px] text-ink-600">
-                Escolha o que vai aparecer neste PDF — isso não muda a escala, só o que é exportado.
-              </p>
+      <div className="print:hidden">
+        {/* 1–2. Título e mês */}
+        <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <div className="eyebrow flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              {rotulo}
             </div>
+            <h1 className="mt-2 font-heading text-[30px] leading-[1.05] font-bold text-ink-900 sm:text-[36px]">
+              {nomeMes(mes)} <span className="font-semibold text-ink-300">{ano}</span>
+            </h1>
+            {descricao && <p className="mt-2 max-w-xl text-[13.5px] text-ink-600">{descricao}</p>}
+          </div>
+          <MonthYearPicker ano={ano} mes={mes} basePath={basePath} />
+        </header>
 
-            <div className="flex items-center gap-3 border-b border-brand-100 px-6 py-2.5">
-              <button type="button" onClick={selecionarTodasExport} className="link">
-                Selecionar todas
-              </button>
-              <span className="text-ink-300">·</span>
-              <button type="button" onClick={limparSelecaoExport} className="link">
-                Limpar seleção
-              </button>
-              <span className="ml-auto text-[12px] font-semibold text-ink-600">
-                {(() => {
-                  const totalSelecionadas = todasFuncaoIdsExport.filter((id) => isSelecionadaExport(id)).length;
-                  const categoriasComSelecao = categorias.filter((c) =>
-                    c.funcoes.some((f) => isSelecionadaExport(f.id))
-                  ).length;
-                  if (totalSelecionadas === 0) return "Nada selecionado";
-                  return `${totalSelecionadas} função(ões) selecionada(s) em ${categoriasComSelecao} categoria(s)`;
-                })()}
+        {/* 3–4. Resumo e ações */}
+        <div className="mt-6 flex flex-col gap-4 rounded-[14px] border border-line bg-white p-4 shadow-[0_1px_2px_rgb(20_34_53/0.04)] sm:p-5 lg:flex-row lg:items-center lg:gap-8">
+          {temAlgumaFuncao ? (
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <dl className="flex items-stretch gap-5 sm:gap-7">
+                <div>
+                  <dt className="text-[12px] text-ink-500">Cultos</dt>
+                  <dd className="font-heading text-[22px] leading-tight font-bold text-ink-900 tabular-nums">
+                    {diasDoMes.length}
+                  </dd>
+                </div>
+                <div className="w-px bg-line" />
+                <div>
+                  <dt className="text-[12px] text-ink-500">Completos</dt>
+                  <dd className="font-heading text-[22px] leading-tight font-bold text-ink-900 tabular-nums">
+                    {resumoMes.completos}
+                    <span className="text-[14px] font-semibold text-ink-300">/{diasDoMes.length}</span>
+                  </dd>
+                </div>
+                <div className="w-px bg-line" />
+                <div className="min-w-0">
+                  <dt className="text-[12px] text-ink-500">Funções preenchidas</dt>
+                  <dd className="font-heading text-[22px] leading-tight font-bold text-ink-900 tabular-nums">
+                    {pctMes}%
+                  </dd>
+                </div>
+              </dl>
+              <div className="flex items-center gap-3">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-100" role="presentation">
+                  <div
+                    className={
+                      "h-full rounded-full transition-[width] duration-500 ease-premium " +
+                      (pctMes === 100 ? "bg-green-500" : "bg-brand-700")
+                    }
+                    style={{ width: `${pctMes}%` }}
+                  />
+                </div>
+                <span className="text-[12px] whitespace-nowrap text-ink-500 tabular-nums">
+                  {resumoMes.preenchidas} de {resumoMes.funcoes}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="flex-1 text-[13.5px] text-ink-600">Nenhuma função cadastrada ainda.</p>
+          )}
+
+          <div className="flex flex-col gap-2.5 border-t border-line pt-4 lg:items-end lg:border-t-0 lg:pt-0">
+            <div className="flex items-center justify-between gap-3">
+              <span
+                className={"flex items-center gap-1.5 text-[12.5px] font-medium " + estadoSalvamento.cor}
+                aria-live="polite"
+              >
+                {estadoSalvamento.icone}
+                {estadoSalvamento.texto}
               </span>
-            </div>
-
-            <div className="border-b border-brand-100 px-6 py-2.5">
-              <label className="flex items-center gap-2 text-[12.5px] font-medium text-ink-900">
-                <input
-                  type="checkbox"
-                  checked={incluirAtividadesExport}
-                  onChange={(e) => setIncluirAtividadesExport(e.target.checked)}
-                  className="h-4 w-4 accent-orange-600"
-                />
-                🎉 Incluir atividades adicionais
-              </label>
-            </div>
-
-            <div className="flex-1 overflow-auto px-6 py-3">
-              {categorias.map((cat) => {
-                if (cat.funcoes.length === 0) return null;
-                const estado = estadoCategoriaExport(cat);
-                const expandida = categoriasExpandidas[cat.id] ?? true;
-                return (
-                  <div key={cat.id} className="mb-2.5 rounded-xl border border-brand-100">
-                    <div className="flex items-center gap-1.5 px-3 py-2.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleCategoriaExpandida(cat.id)}
-                        className="flex h-6 w-6 flex-none items-center justify-center text-ink-400 hover:text-ink-900"
-                        aria-label={expandida ? "Recolher" : "Expandir"}
-                      >
-                        {expandida ? "▾" : "▸"}
-                      </button>
-                      <CheckboxTriState
-                        checked={estado === "checked"}
-                        indeterminate={estado === "indeterminate"}
-                        onChange={() => toggleCategoriaExport(cat)}
-                        label={`${emojiMinisterio(cat.nome)} ${cat.nome}`}
-                      />
-                    </div>
-                    {expandida && (
-                      <div className="flex flex-col gap-1 border-t border-brand-100 py-2 pl-12 pr-3">
-                        {cat.funcoes.map((f) => {
-                          // Alvo de um dia específico (fim de semana ou quarta) já sabe o dia da semana e troca o rótulo
-                          // (ex.: "Apoio" numa quarta); alvo "mês inteiro" cobre dias variados, então mostra o nome puro.
-                          const label =
-                            modalExportAlvo && modalExportAlvo !== "mes"
-                              ? labelFuncao(f.nome, modalExportAlvo.diaSemana)
-                              : f.nome;
-                          return (
-                            <CheckboxTriState
-                              key={f.id}
-                              checked={isSelecionadaExport(f.id)}
-                              indeterminate={false}
-                              onChange={() => toggleFuncaoExport(f.id)}
-                              label={`${emojiFuncao(f.nome)} ${label}`}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {erroSelecaoExport && (
-              <p className="border-t border-brand-100 px-6 py-2.5 text-[12.5px] font-medium text-red-600">
-                {erroSelecaoExport}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 border-t border-brand-100 px-6 py-4">
-              <button type="button" className="btn-ghost" onClick={() => setModalExportAlvo(null)}>
-                Cancelar
+              {/* Celular: "Salvar" fica na linha do status, as duas ações principais ganham a linha de baixo inteira. */}
+              <button
+                type="button"
+                onClick={handleSalvarTudo}
+                disabled={salvandoTudo}
+                className="btn-ghost btn-sm text-brand-700 sm:hidden"
+              >
+                {salvandoTudo ? <Spinner size={14} /> : <Icon name="save" size={15} />}
+                {salvandoTudo ? "Salvando…" : "Salvar agora"}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => handleConfirmarSelecaoExport("preview")}>
-                👁️ Visualizar
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <button
+                type="button"
+                onClick={handleSalvarTudo}
+                disabled={salvandoTudo}
+                className="btn-secondary hidden sm:inline-flex"
+                title="Salvar agora"
+              >
+                {salvandoTudo ? <Spinner size={16} /> : <Icon name="save" size={17} className="text-ink-500" />}
+                {salvandoTudo ? "Salvando…" : "Salvar"}
               </button>
-              <button type="button" className="btn-primary" onClick={() => handleConfirmarSelecaoExport("baixar")}>
-                ⬇️ Baixar PDF
-              </button>
+              {showExport && (
+                <button type="button" onClick={() => setSeletorAberto("whatsapp")} className="btn-secondary px-3">
+                  <Icon name="message" size={17} className="text-ink-500" />
+                  Compartilhar
+                </button>
+              )}
+              {showExport && (
+                <button type="button" onClick={() => setSeletorAberto("pdf")} className="btn-primary px-3">
+                  <Icon name="file" size={17} />
+                  Exportar PDF
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
 
-      {toast && (
-        <div className="no-print fixed bottom-5 right-5 z-50 rounded-xl bg-ink-900 px-4 py-3 text-sm font-semibold text-white shadow-soft-lift">
-          {toast}
-        </div>
-      )}
-
-      {confirmando && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-5">
-          <div className="max-h-[82vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-6 shadow-soft-lift">
-            <div className="mb-2 flex items-center gap-2.5">
-              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-red-50 text-[18px]">
-                ⚠️
-              </span>
-              <h3 className="font-heading text-base font-extrabold text-ink-900">Escala incompleta</h3>
-            </div>
-            <p className="mb-4 text-[12.5px] leading-relaxed text-ink-600">
-              Existem funções sem responsável
-              {confirmando.alvo === "mes" ? ` em ${nomeMes(mes)}/${ano}` : ""}. Você pode voltar e preencher, ou
-              exportar mesmo assim.
-            </p>
-            <div className="mb-5 flex max-h-80 flex-col gap-2 overflow-auto">
-              {confirmando.pendentes.map((c) => (
-                <div key={c.data} className="rounded-lg bg-brand-50 p-2.5">
-                  <div className="mb-0.5 text-[12.5px] font-bold text-ink-900">
-                    {nomeDiaSemana(c.diaSemana)} • {fmtDDMM(ano, mes, c.dia)}/{ano}
-                  </div>
-                  <div className="text-[11.5px] text-red-600">{c.faltando.join(", ")}</div>
+        {/* 5. Escala */}
+        <section className="mt-10">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="font-heading text-[17px] font-bold text-ink-900">Fim de semana</h2>
+            <span className="text-[12.5px] text-ink-500">
+              {fdsPares.length} {fdsPares.length === 1 ? "fim de semana" : "fins de semana"}
+            </span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          {fdsPares.length === 0 ? (
+            <div className="empty-state">Nenhum culto de fim de semana neste mês.</div>
+          ) : (
+            <div className="flex flex-col gap-4 md:gap-5">
+              {fdsPares.map((par) => (
+                <div key={(par.sab ?? par.dom)!.data} className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                  {par.sab ? renderCard(par.sab) : <div className="hidden md:block" />}
+                  {par.dom ? renderCard(par.dom) : <div className="hidden md:block" />}
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn-ghost" onClick={() => setConfirmando(null)}>
+          )}
+        </section>
+
+        <section className="mt-10">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="font-heading text-[17px] font-bold text-ink-900">Quarta-feira</h2>
+            <span className="text-[12.5px] text-ink-500">
+              {dias.qua.length} {dias.qua.length === 1 ? "culto" : "cultos"}
+            </span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          {dias.qua.length === 0 ? (
+            <div className="empty-state">Nenhum culto de meio de semana neste mês.</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">{dias.qua.map((d) => renderCard(d))}</div>
+          )}
+        </section>
+      </div>
+
+      {/* Bloco de impressão: só existe enquanto o PDF está sendo gerado. */}
+      {imprimindo && exportacao && <Impressao>{docPreview}</Impressao>}
+
+      {seletorAberto && (
+        <SeletorExportacao
+          ano={ano}
+          mes={mes}
+          modo={seletorAberto}
+          cultos={cultosExport}
+          progresso={progressoExport}
+          datas={datasSelecionadas}
+          onDatasChange={setDatasSelecionadas}
+          categorias={categorias}
+          funcoesExcluidas={funcoesExcluidas}
+          onFuncoesExcluidasChange={setFuncoesExcluidas}
+          incluirAtividades={incluirAtividades}
+          onIncluirAtividadesChange={setIncluirAtividades}
+          onCancelar={() => setSeletorAberto(null)}
+          onConfirmar={confirmarSeletor}
+        />
+      )}
+
+      {pendentesExport && (
+        <Modal
+          largura="sm"
+          onClose={() => setPendentesExport(null)}
+          titulo="Há funções sem responsável"
+          descricao="Elas não aparecem no PDF. Você pode voltar e preencher, ou gerar mesmo assim."
+          rodape={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="btn-ghost h-10" onClick={() => setPendentesExport(null)}>
                 Voltar para preencher
               </button>
               <button
                 type="button"
                 className="btn-primary"
                 onClick={() => {
-                  const { alvo, acao } = confirmando;
-                  setConfirmando(null);
-                  finalizarExport(alvo, acao);
+                  const { exp, acao } = pendentesExport;
+                  setPendentesExport(null);
+                  gerarPdf(exp, acao);
                 }}
               >
-                Continuar mesmo assim
+                Gerar mesmo assim
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <ul className="flex flex-col gap-2 px-5 py-4 sm:px-6">
+            {pendentesExport.dias.map((c) => {
+              const { y, m, d } = parseIsoDate(c.data);
+              return (
+                <li key={c.data} className="rounded-[10px] border border-line bg-paper/60 px-3.5 py-2.5">
+                  <div className="text-[13px] font-semibold text-ink-900">
+                    {nomeDiaSemanaLongo(new Date(y, m, d).getDay())} · {fmtDDMM(y, m, d)}
+                  </div>
+                  <div className="mt-0.5 flex items-start gap-1.5 text-[12.5px] text-orange-700">
+                    <span className="mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px] border-orange-500" />
+                    {c.faltando.join(", ")}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Modal>
       )}
 
-      <div className="print:hidden">
-        <div className="mb-3 flex items-baseline justify-between px-0.5">
-          <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">Fim de Semana</span>
-          <span className="text-xs font-semibold tabular-nums text-ink-400">{fdsPares.length} fim(ns) de semana</span>
-        </div>
-        {fdsPares.length === 0 ? (
-          <div className="empty-state mb-6">Nenhum culto de fim de semana neste mês.</div>
-        ) : (
-          <div className="mb-6 flex flex-col gap-4">
-            {fdsPares.map((par) => (
-              <div key={(par.sab ?? par.dom)!.data} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {par.sab ? renderCard(par.sab.data, par.sab.dia, par.sab.diaSemana) : <div />}
-                {par.dom ? renderCard(par.dom.data, par.dom.dia, par.dom.diaSemana) : <div />}
-              </div>
-            ))}
-          </div>
-        )}
+      {previewAberto && exportacao && (
+        <PreviewDocumento
+          titulo={cabecalhoDocumento(exportacao.datas, ano, mes).titulo}
+          onFechar={() => setPreviewAberto(false)}
+          onBaixar={() => imprimir(exportacao)}
+        >
+          {docPreview}
+        </PreviewDocumento>
+      )}
 
-        <div className="mb-3 flex items-baseline justify-between px-0.5">
-          <span className="text-[13px] font-extrabold uppercase tracking-wide text-ink-900">Meio de Semana</span>
-          <span className="text-xs font-semibold tabular-nums text-ink-400">{dias.qua.length}</span>
+      {aviso && (
+        <div
+          role="status"
+          className={
+            "no-print fixed bottom-5 left-1/2 z-[60] flex -translate-x-1/2 animate-rise-in items-center gap-2 rounded-full px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-soft-lift sm:left-auto sm:right-6 sm:translate-x-0 " +
+            (aviso.tipo === "sucesso" ? "bg-ink-900" : "bg-red-600")
+          }
+        >
+          <Icon name={aviso.tipo === "sucesso" ? "checkCircle" : "alert"} size={17} />
+          {aviso.texto}
         </div>
-        {dias.qua.length === 0 ? (
-          <div className="empty-state">Nenhum culto de meio de semana neste mês.</div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {dias.qua.map((d) => renderCard(d.data, d.dia, d.diaSemana))}
-          </div>
-        )}
+      )}
+      {!aviso && saveStatus === "erro" && (
+        <div
+          role="alert"
+          className="no-print fixed bottom-5 left-1/2 z-[60] flex -translate-x-1/2 animate-rise-in items-center gap-2 rounded-full bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white shadow-soft-lift sm:left-auto sm:right-6 sm:translate-x-0"
+        >
+          <Icon name="alert" size={17} />
+          Sem conexão — tentando salvar de novo
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Pré-visualização do PDF numa folha A4 — encolhe proporcionalmente em telas estreitas (sem rolagem lateral). */
+function PreviewDocumento({
+  titulo,
+  onFechar,
+  onBaixar,
+  children,
+}: {
+  titulo: string;
+  onFechar: () => void;
+  onBaixar: () => void;
+  children: React.ReactNode;
+}) {
+  const LARGURA_A4 = 794;
+  const [escala, setEscala] = useState(1);
+  const areaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function medir() {
+      // clientWidth já desconta a barra de rolagem; 24px = respiro lateral (px-3).
+      const largura = (areaRef.current?.clientWidth ?? window.innerWidth) - 24;
+      setEscala(Math.min(1, largura / LARGURA_A4));
+    }
+    medir();
+    window.addEventListener("resize", medir);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "Escape") onFechar();
+    }
+    document.addEventListener("keydown", tecla);
+    return () => {
+      window.removeEventListener("resize", medir);
+      document.removeEventListener("keydown", tecla);
+      document.body.style.overflow = overflow;
+    };
+  }, [onFechar]);
+
+  return (
+    <div className="no-print fixed inset-0 z-50 flex animate-fade-in flex-col bg-ink-950/80 backdrop-blur-[2px]">
+      <div className="flex flex-none items-center gap-3 border-b border-white/10 bg-ink-950 px-4 py-3 text-white sm:px-6">
+        <Icon name="eye" size={18} className="text-white/60" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-semibold tracking-[0.14em] text-white/50 uppercase">Pré-visualização</div>
+          <div className="truncate text-[14px] font-semibold">{titulo}</div>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-10 items-center rounded-[10px] px-3 text-[13.5px] font-semibold text-white/80 hover:bg-white/10 hover:text-white"
+          onClick={onFechar}
+        >
+          Fechar
+        </button>
+        <button type="button" className="btn-primary !bg-white !text-ink-900 hover:!bg-ink-100" onClick={onBaixar}>
+          <Icon name="download" size={17} />
+          <span className="hidden sm:inline">Baixar PDF</span>
+          <span className="sm:hidden">PDF</span>
+        </button>
       </div>
-
-      <div className="hidden print:block">{renderPrintContent()}</div>
-
-      {previewAberto && (
-        <div className="no-print fixed inset-0 z-50 overflow-auto bg-ink-900/70 p-4 sm:p-8">
-          <div className="sticky top-0 z-10 mb-4 flex items-center justify-between rounded-xl bg-white px-4 py-3 shadow-soft-lift">
-            <span className="text-[13px] font-extrabold text-ink-900">👁️ Pré-visualização — igual ao PDF final</span>
-            <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => setPreviewAberto(false)}>
-                Fechar
-              </button>
-              <button type="button" className="btn-primary" onClick={() => window.print()}>
-                🖨️ Baixar PDF
-              </button>
-            </div>
-          </div>
-          <div className="mx-auto max-w-[820px] rounded-2xl bg-white p-6 shadow-soft-lift sm:p-10">
-            {renderPrintContent()}
+      <div ref={areaRef} className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-6 sm:py-10">
+        <div className="mx-auto" style={{ width: LARGURA_A4 * escala }}>
+          <div
+            className="origin-top-left rounded-[4px] bg-white p-[42px] shadow-soft-lift"
+            style={{ width: LARGURA_A4, zoom: escala }}
+          >
+            {children}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

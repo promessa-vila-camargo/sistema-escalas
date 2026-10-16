@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin/pessoas", label: "Pessoas" },
         ]}
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-7">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-6 sm:py-10">{children}</main>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/auth/dal";
-import { FUNCOES_SEM_REPETICAO_DOMINGO } from "@/lib/datas";
+import { CATEGORIAS_CONFIRMACAO, FUNCOES_SEM_REPETICAO_DOMINGO } from "@/lib/datas";
 
 /**
  * Admin pode escrever qualquer nome em qualquer função (texto livre, sem
@@ -95,6 +95,32 @@ export async function buscarAtribuicoes(dataInicio: string, dataFim: string): Pr
     const key = row.data.toISOString().slice(0, 10);
     if (!out[key]) out[key] = {};
     out[key][row.funcaoId] = row.nomeEscalado;
+  }
+  return out;
+}
+
+export type ConfirmacaoMap = Record<string, Record<string, "AGUARDANDO" | "CONFIRMADO" | "TROCA_SOLICITADA">>; // data -> funcaoId -> status
+
+/**
+ * Status de confirmação das atribuições ligadas a um login, só nas áreas que
+ * entram no fluxo de confirmação (CATEGORIAS_CONFIRMACAO) — pro indicador
+ * no quadro de escala. Só leitura.
+ */
+export async function buscarConfirmacoes(dataInicio: string, dataFim: string): Promise<ConfirmacaoMap> {
+  await verifySession();
+  const rows = await prisma.atribuicao.findMany({
+    where: {
+      data: { gte: new Date(dataInicio), lte: new Date(dataFim) },
+      userId: { not: null },
+      funcao: { categoria: { nome: { in: CATEGORIAS_CONFIRMACAO } } },
+    },
+    select: { data: true, funcaoId: true, status: true },
+  });
+  const out: ConfirmacaoMap = {};
+  for (const row of rows) {
+    const key = row.data.toISOString().slice(0, 10);
+    if (!out[key]) out[key] = {};
+    out[key][row.funcaoId] = row.status;
   }
   return out;
 }

@@ -15,31 +15,44 @@ export default function TopNav({
 }) {
   const pathname = usePathname();
   return (
-    <header className="no-print sticky top-0 z-20 border-b border-brand-100 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-5 py-3">
-        <div className="flex items-center gap-3">
-          <Image src="/logo-icon.png" alt="" width={34} height={34} className="h-[34px] w-[34px] rounded-full" />
-          <div className="flex flex-col leading-tight">
-            <span className="font-heading text-[15px] font-extrabold text-ink-900">PROMESSA</span>
-            <span className="text-[9px] font-bold italic uppercase tracking-wide text-orange-600">
-              Vila Camargo
-            </span>
-          </div>
-          <span className="hidden h-7 w-px bg-brand-200 sm:block" />
-          <span className="hidden text-sm font-semibold text-ink-600 sm:block">Escalas</span>
+    <header className="no-print sticky top-0 z-20 border-b border-line bg-white/92 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 pt-3 pb-2 sm:px-6 md:h-16 md:flex-nowrap md:py-0">
+        <Link href="/" className="flex flex-none items-center gap-3" aria-label="Início — Promessa Vila Camargo">
+          {/* Logomarca original, proporção preservada (1647×417). */}
+          <Image src="/logo.png" alt="Promessa Vila Camargo" width={1647} height={417} priority className="h-7 w-auto sm:h-8" />
+          <span className="hidden h-6 w-px bg-line-strong lg:block" />
+          <span className="hidden text-[13px] font-semibold tracking-[0.08em] text-ink-500 uppercase lg:block">Escalas</span>
+        </Link>
+
+        <div className="ml-auto flex items-center gap-1 text-[13px] md:order-last">
+          <span className="mr-1 hidden text-ink-600 sm:inline">
+            <b className="font-semibold text-ink-900">{user.nome}</b>
+            <span className="ml-1.5 text-ink-400">· {user.role === "ADMIN" ? "Admin" : "Voluntário"}</span>
+          </span>
+          <Link href="/conta" className="btn-ghost btn-sm">
+            Minha conta
+          </Link>
+          <form action={logout}>
+            <button type="submit" className="btn-ghost btn-sm">
+              Sair
+            </button>
+          </form>
         </div>
 
         {tabs && (
-          <nav className="flex items-center gap-1 rounded-lg bg-brand-50 p-1">
+          <nav className="-mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:w-auto md:px-0">
             {tabs.map((tab) => {
               const active = tab.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(tab.href);
               return (
                 <Link
                   key={tab.href}
                   href={tab.href}
+                  aria-current={active ? "page" : undefined}
                   className={
-                    "rounded-md px-3.5 py-1.5 text-sm font-semibold transition-colors " +
-                    (active ? "bg-white text-ink-900 shadow-soft" : "text-ink-600 hover:text-ink-900")
+                    "relative flex h-10 flex-none items-center rounded-[9px] px-3 text-[13.5px] font-semibold transition-colors md:h-16 md:rounded-none " +
+                    (active
+                      ? "text-ink-900 after:absolute after:inset-x-3 after:bottom-0 after:h-[2px] after:rounded-full after:bg-orange-500"
+                      : "text-ink-500 hover:text-ink-900")
                   }
                 >
                   {tab.label}
@@ -48,21 +61,6 @@ export default function TopNav({
             })}
           </nav>
         )}
-
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          <span className="text-ink-600">
-            Olá, <b className="text-ink-900">{user.nome}</b>{" "}
-            <span className="badge-neutral">{user.role === "ADMIN" ? "Admin" : "Voluntário"}</span>
-          </span>
-          <Link href="/conta" className="link">
-            Minha conta
-          </Link>
-          <form action={logout}>
-            <button type="submit" className="btn-ghost">
-              Sair
-            </button>
-          </form>
-        </div>
       </div>
     </header>
   );

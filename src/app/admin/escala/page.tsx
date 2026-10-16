@@ -1,10 +1,14 @@
 import { verifyAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
+import {
+  buscarAtribuicoes,
+  buscarObservacoes,
+  buscarMinisteriosResponsaveis,
+  buscarConfirmacoes,
+} from "@/lib/actions/escala";
 import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
 import { buscarAtividades } from "@/lib/actions/atividade";
 import { isoDate, addDays, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
-import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
 import EventosExtra from "@/components/EventosExtra";
 
@@ -44,6 +48,7 @@ export default async function AdminEscalaPage({
   const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(buscaDe, buscaAte);
   const eventosExtra = await buscarEventosExtra();
   const atividades = await buscarAtividades(buscaDe, buscaAte);
+  const confirmacoes = await buscarConfirmacoes(buscaDe, buscaAte);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
@@ -53,14 +58,11 @@ export default async function AdminEscalaPage({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-heading text-xl font-extrabold text-ink-900">Escala</h1>
-        <MonthYearPicker ano={ano} mes={mes} basePath="/admin/escala" />
-      </div>
-      <div className="mb-3">
-        <span className="badge-positive">🟢 Escala oficial</span>
-      </div>
+      {/* key: trocar de mês remonta o quadro — sem ela, o estado do mês anterior ficaria na tela. */}
       <EscalaBoard
+        key={`${ano}-${mes}`}
+        basePath="/admin/escala"
+        rotulo="Escala oficial dos cultos"
         ano={ano}
         mes={mes}
         categorias={categorias}
@@ -68,6 +70,7 @@ export default async function AdminEscalaPage({
         observacoesIniciais={observacoes}
         ministeriosResponsaveisIniciais={ministeriosResponsaveis}
         atividadesIniciais={atividades}
+        confirmacoesIniciais={confirmacoes}
         currentUser={user}
         showExport
         pessoasCadastradas={pessoasCadastradas}

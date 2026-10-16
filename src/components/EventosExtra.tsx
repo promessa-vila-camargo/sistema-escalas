@@ -7,10 +7,14 @@ import {
   definirAtribuicaoExtra,
   type EventoExtraDTO,
 } from "@/lib/actions/eventoExtra";
-import { fmtDataCompleta, proximoSabado } from "@/lib/datas";
-import { emojiMinisterio, emojiFuncao } from "@/lib/emojis";
+import { fmtDataCompleta, parseIsoDate, nomeMesAbrev, proximoSabado } from "@/lib/datas";
 import type { CategoriaDTO } from "./EscalaBoard";
 import type { CurrentUser } from "@/lib/auth/dal";
+import Icon from "./ui/Icon";
+import Modal from "./ui/Modal";
+import Menu from "./ui/Menu";
+import Impressao, { abrirImpressao } from "./ui/Impressao";
+import FuncaoLinha, { DivisorMinisterio } from "./escala/FuncaoLinha";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -29,6 +33,7 @@ export default function EventosExtra({
   const [formData, setFormData] = useState("");
   const [formHorario, setFormHorario] = useState("");
   const [erroForm, setErroForm] = useState<string | null>(null);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [printEventoId, setPrintEventoId] = useState<string | null>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -86,7 +91,7 @@ export default function EventosExtra({
     try {
       await excluirEventoExtra(id);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Não foi possível excluir.");
+      setErroSalvar(e instanceof Error ? e.message : "Não foi possível excluir.");
     }
   }
 
@@ -97,124 +102,221 @@ export default function EventosExtra({
   }
 
   function commitSave(eventoId: string, funcaoId: string, nome: string | null) {
-    definirAtribuicaoExtra(eventoId, funcaoId, nome).catch((e) => {
-      alert(e instanceof Error ? e.message : "Não foi possível salvar.");
-    });
+    definirAtribuicaoExtra(eventoId, funcaoId, nome)
+      .then(() => setErroSalvar(null))
+      .catch((e) => setErroSalvar(e instanceof Error ? e.message : "Não foi possível salvar."));
   }
 
   function handleTextChange(eventoId: string, funcaoId: string, value: string) {
     applyLocalChange(eventoId, funcaoId, value);
     const key = `${eventoId}:${funcaoId}`;
     if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
-    saveTimers.current[key] = setTimeout(() => commitSave(eventoId, funcaoId, value), SAVE_DEBOUNCE_MS);
+    saveTimers.current[key] = setTimeout(() => {
+      delete saveTimers.current[key];
+      commitSave(eventoId, funcaoId, value);
+    }, SAVE_DEBOUNCE_MS);
   }
 
   function handleBlurCommit(eventoId: string, funcaoId: string, value: string) {
     const key = `${eventoId}:${funcaoId}`;
-    if (saveTimers.current[key]) {
-      clearTimeout(saveTimers.current[key]);
-      delete saveTimers.current[key];
-    }
     const maiuscula = value.trim().toUpperCase();
     if (maiuscula !== value) applyLocalChange(eventoId, funcaoId, maiuscula);
+    // Só sair do campo, sem ter digitado nada, não regrava.
+    if (!saveTimers.current[key]) return;
+    clearTimeout(saveTimers.current[key]);
+    delete saveTimers.current[key];
     commitSave(eventoId, funcaoId, maiuscula || null);
   }
 
-  function handleImprimir(id: string) {
-    setPrintEventoId(id);
-    setTimeout(() => window.print(), 30);
+  function handleImprimir(evento: EventoExtraDTO) {
+    setPrintEventoId(evento.id);
+    abrirImpressao(`Escala extraordinária ${evento.data.split("-").reverse().join("-")}`, () => setPrintEventoId(null));
   }
 
+  const eventoImpressao = printEventoId ? eventos.find((e) => e.id === printEventoId) : null;
+
   return (
-    <div className="mt-8">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-0.5">
+    <section className="mt-12 print:hidden">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="badge-neutral !bg-orange-100 !text-orange-700">🟠 Escalas extraordinárias</span>
-          <p className="mt-1 text-[12px] text-ink-600">Eventos fora do horário oficial — não afetam a escala normal.</p>
+          <div className="flex items-center gap-3">
+            <h2 className="font-heading text-[17px] font-bold text-ink-900">Escalas extraordinárias</h2>
+            <span className="text-[12.5px] text-ink-500 tabular-nums">{eventos.length}</span>
+          </div>
+          <p className="mt-1 text-[13px] text-ink-600">Eventos fora do horário oficial — não afetam a escala normal.</p>
         </div>
         {podeGerenciar && (
-          <div className="no-print flex gap-2">
-            <button type="button" onClick={() => abrirModalRapido("sabado_noite")} className="btn-secondary">
-              🌙 Culto de sábado à noite
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button type="button" onClick={() => abrirModalRapido("sabado_noite")} className="btn-secondary px-3">
+              <Icon name="moon" size={16} className="text-ink-500" />
+              Sábado à noite
             </button>
-            <button type="button" onClick={() => abrirModalRapido("outro")} className="btn-primary">
-              + Outro evento/horário
+            <button type="button" onClick={() => abrirModalRapido("outro")} className="btn-secondary px-3">
+              <Icon name="plus" size={16} className="text-ink-500" />
+              Outro evento
             </button>
           </div>
         )}
       </div>
 
+      {erroSalvar && (
+        <p className="mb-3 flex items-center gap-2 rounded-[10px] bg-red-50 px-3 py-2 text-[13px] font-medium text-red-600" role="alert">
+          <Icon name="alert" size={16} /> {erroSalvar}
+        </p>
+      )}
+
       {eventos.length === 0 ? (
         <div className="empty-state">Nenhuma escala extraordinária cadastrada.</div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {eventos.map((evento) => (
-            <div key={evento.id} className="card !border-orange-200 !p-3.5">
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <div>
-                  <div className="mb-1 flex items-center gap-1.5">
-                    <span className="badge-neutral !bg-orange-100 !text-orange-700">🟠 ESCALA EXTRAORDINÁRIA</span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+          {eventos.map((evento) => {
+            const { m, d } = parseIsoDate(evento.data);
+            return (
+              <article
+                key={evento.id}
+                className="relative rounded-[14px] border border-line bg-white shadow-[0_1px_2px_rgb(20_34_53/0.04)]"
+              >
+                <span
+                  className="absolute inset-x-0 top-0 h-[3px] rounded-t-[14px] bg-[repeating-linear-gradient(135deg,var(--color-orange-500)_0_8px,var(--color-orange-200)_8px_14px)]"
+                  aria-hidden
+                />
+                <header className="flex items-center gap-3.5 px-4 pt-5 pb-3.5 sm:px-5">
+                  <div className="flex w-11 flex-none flex-col items-center leading-none">
+                    <span className="font-heading text-[30px] font-bold tracking-tight text-ink-900 tabular-nums">
+                      {String(d).padStart(2, "0")}
+                    </span>
+                    <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] text-ink-400">
+                      {nomeMesAbrev(m)}
+                    </span>
                   </div>
-                  <div className="text-[14px] font-extrabold text-ink-900">{evento.nome}</div>
-                  <div className="text-[12px] tabular-nums text-ink-600">
-                    {fmtDataCompleta(evento.data)} — {evento.horario}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-heading text-[15px] leading-tight font-bold text-ink-900">{evento.nome}</h3>
+                    <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-ink-500">
+                      <Icon name="clock" size={14} className="text-orange-500" />
+                      <span className="truncate tabular-nums">
+                        {fmtDataCompleta(evento.data)} · {evento.horario}
+                      </span>
+                    </p>
                   </div>
+                  <Menu
+                    rotulo="Ações da escala extraordinária"
+                    itens={[
+                      { rotulo: "Baixar PDF", icone: "download", onSelect: () => handleImprimir(evento) },
+                      ...(podeGerenciar
+                        ? [{ rotulo: "Excluir", icone: "trash" as const, onSelect: () => handleExcluir(evento.id) }]
+                        : []),
+                    ]}
+                  />
+                </header>
+                <div className="border-t border-line px-4 pt-3.5 pb-4 sm:px-5">
+                  {categoriasVisiveis.map((cat) => {
+                    if (cat.funcoes.length === 0) return null;
+                    return (
+                      <div key={cat.id} className="pt-3.5 first:pt-0">
+                        <DivisorMinisterio nome={cat.nome} />
+                        {cat.funcoes.map((f) => (
+                          <FuncaoLinha
+                            key={f.id}
+                            label={f.nome}
+                            valor={evento.atribuicoes[f.id] ?? ""}
+                            editavel={isAdmin || currentUser.funcaoIds.includes(f.id)}
+                            onChange={(v) => handleTextChange(evento.id, f.id, v)}
+                            onBlur={(v) => handleBlurCommit(evento.id, f.id, v)}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="no-print flex flex-none gap-1">
-                  <button
-                    type="button"
-                    title="Gerar PDF desta escala"
-                    onClick={() => handleImprimir(evento.id)}
-                    className="rounded-md p-1 text-[15px] text-ink-400 hover:bg-brand-50 hover:text-orange-600"
-                  >
-                    🖨️
-                  </button>
-                  {podeGerenciar && (
-                    <button
-                      type="button"
-                      title="Excluir"
-                      onClick={() => handleExcluir(evento.id)}
-                      className="rounded-md p-1 text-[15px] text-ink-400 hover:bg-red-50 hover:text-red-600"
-                    >
-                      🗑️
-                    </button>
-                  )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {modalAberto && (
+        <Modal
+          largura="sm"
+          onClose={() => setModalAberto(false)}
+          titulo="Nova escala extraordinária"
+          descricao="Não altera os horários oficiais — existe só nesta escala."
+          rodape={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="btn-ghost h-10" onClick={() => setModalAberto(false)}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-primary" disabled={criando} onClick={handleCriar}>
+                {criando ? "Criando…" : "Criar escala"}
+              </button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4 px-5 py-5 sm:px-6">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium text-ink-800">Nome do evento</span>
+              <input
+                value={formNome}
+                onChange={(e) => setFormNome(e.target.value)}
+                placeholder='Ex.: "Culto especial"'
+                className="input"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium text-ink-800">Data</span>
+                <input type="date" value={formData} onChange={(e) => setFormData(e.target.value)} className="input" />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium text-ink-800">Horário</span>
+                <input type="time" value={formHorario} onChange={(e) => setFormHorario(e.target.value)} className="input" />
+              </label>
+            </div>
+            {erroForm && (
+              <p className="form-message-error" role="alert">
+                <Icon name="alert" size={16} className="mt-0.5" /> {erroForm}
+              </p>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {eventoImpressao && (
+        <Impressao>
+          <div className="bg-white font-sans text-[#142235]">
+            <header className="mb-5 flex items-end justify-between gap-6 border-b-[1.5px] border-[#004b83] pb-3.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Promessa Vila Camargo" className="h-[34px] w-auto" />
+              <div className="text-right">
+                <div className="text-[8.5px] font-bold tracking-[0.22em] text-[#e18800] uppercase">
+                  Escala extraordinária
+                </div>
+                <div className="font-heading text-[20px] leading-tight font-bold text-[#004b83]">{eventoImpressao.nome}</div>
+                <div className="text-[10px] font-semibold text-[#56657a]">
+                  {fmtDataCompleta(eventoImpressao.data)} · {eventoImpressao.horario}
                 </div>
               </div>
-
+            </header>
+            <div className="mx-auto max-w-[520px] columns-1">
               {categoriasVisiveis.map((cat) => {
                 if (cat.funcoes.length === 0) return null;
                 return (
-                  <div key={cat.id} className="mb-0.5">
-                    <div className="mt-2 mb-0.5 text-[9.5px] font-extrabold uppercase tracking-wide text-ink-400 first:mt-0">
-                      {emojiMinisterio(cat.nome)} {cat.nome}
-                    </div>
+                  <div key={cat.id} className="mb-3 break-inside-avoid rounded-[10px] border border-[#dfe3e9] px-4 py-3">
+                    <div className="mb-1 text-[7.5px] font-bold tracking-[0.16em] text-[#6f7d90] uppercase">{cat.nome}</div>
                     {cat.funcoes.map((f) => {
-                      const valor = evento.atribuicoes[f.id] ?? "";
-                      const preenchido = valor.trim().length > 0;
-                      const editavel = isAdmin || currentUser.funcaoIds.includes(f.id);
+                      const nome = (eventoImpressao.atribuicoes[f.id] ?? "").trim();
                       return (
-                        <div key={f.id} className="leader-row">
-                          <span className="leader-label" title={f.nome}>
-                            {emojiFuncao(f.nome)} {f.nome}
-                          </span>
-                          <span className="leader-fill" />
-                          {editavel ? (
-                            <input
-                              type="text"
-                              placeholder="Digite o nome..."
-                              value={valor}
-                              onChange={(e) => handleTextChange(evento.id, f.id, e.target.value)}
-                              onBlur={(e) => handleBlurCommit(evento.id, f.id, e.target.value)}
-                              className="max-w-[48%] flex-none rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12px] font-semibold uppercase text-ink-900 outline-none placeholder:font-normal placeholder:italic placeholder:normal-case placeholder:text-ink-400 hover:border-brand-200 hover:bg-brand-50 focus:border-orange-500 focus:bg-white"
-                            />
-                          ) : (
-                            <span className="max-w-[48%] flex-none truncate text-right text-[12px] font-semibold uppercase text-ink-400">
-                              {valor.trim() || "—"}
-                            </span>
-                          )}
-                          <span className={"flex-none text-[13px] " + (preenchido ? "" : "opacity-70")}>
-                            {preenchido ? "✅" : "⚠️"}
+                        <div
+                          key={f.id}
+                          className="flex items-baseline justify-between gap-3 border-b border-[#eef0f3] py-[3px] last:border-b-0"
+                        >
+                          <span className="text-[9.5px] text-[#56657a]">{f.nome}</span>
+                          <span
+                            className={
+                              "text-right text-[11px] font-bold uppercase " +
+                              (nome ? "text-[#142235]" : "font-medium normal-case text-[#94a0b0] italic")
+                            }
+                          >
+                            {nome || "não preenchido"}
                           </span>
                         </div>
                       );
@@ -223,129 +325,13 @@ export default function EventosExtra({
                 );
               })}
             </div>
-          ))}
-        </div>
-      )}
-
-      {modalAberto && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-5">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-soft-lift">
-            <h3 className="mb-1 font-heading text-base font-extrabold text-ink-900">Nova escala extraordinária</h3>
-            <p className="mb-4 text-[12px] text-ink-600">
-              Não altera os horários oficiais — existe só nesta escala.
-            </p>
-
-            <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-ink-900">Nome do evento</span>
-                <input
-                  value={formNome}
-                  onChange={(e) => setFormNome(e.target.value)}
-                  placeholder='Ex: "Culto especial"'
-                  className="input"
-                />
-              </label>
-              <div className="flex gap-3">
-                <label className="flex flex-1 flex-col gap-1 text-sm">
-                  <span className="font-medium text-ink-900">Data</span>
-                  <input type="date" value={formData} onChange={(e) => setFormData(e.target.value)} className="input" />
-                </label>
-                <label className="flex flex-1 flex-col gap-1 text-sm">
-                  <span className="font-medium text-ink-900">Horário</span>
-                  <input
-                    type="time"
-                    value={formHorario}
-                    onChange={(e) => setFormHorario(e.target.value)}
-                    className="input"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {erroForm && <p className="form-message-error mt-3">{erroForm}</p>}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" className="btn-ghost" onClick={() => setModalAberto(false)}>
-                Cancelar
-              </button>
-              <button type="button" className="btn-primary" disabled={criando} onClick={handleCriar}>
-                {criando ? "Criando..." : "Criar escala"}
-              </button>
-            </div>
+            <footer className="mt-5 flex justify-between border-t border-[#e7e4dd] pt-2 text-[8px] tracking-[0.06em] text-[#949fae] uppercase">
+              <span>Promessa Vila Camargo · Escala extraordinária</span>
+              <span>Gerado em {new Date().toLocaleDateString("pt-BR")}</span>
+            </footer>
           </div>
-        </div>
+        </Impressao>
       )}
-
-      {printEventoId &&
-        (() => {
-          const evento = eventos.find((e) => e.id === printEventoId);
-          if (!evento) return null;
-          return (
-            <div className="hidden print:block">
-              <div className="mb-5 flex items-center gap-4 border-b-4 border-pdforange pb-4">
-                <img src="/logo-icon.png" alt="" className="h-14 w-14 rounded-full" />
-                <div className="flex flex-col">
-                  <span className="font-heading text-[10px] font-bold uppercase tracking-[0.2em] text-pdforange">
-                    Promessa Vila Camargo
-                  </span>
-                  <span className="font-heading text-[22px] font-extrabold text-pdfblue">{evento.nome}</span>
-                  <span className="text-[12px] font-semibold text-ink-600">
-                    {fmtDataCompleta(evento.data)} • {evento.horario}
-                  </span>
-                </div>
-                <span className="ml-auto flex-none rounded-full bg-pdforange px-3 py-1.5 text-center font-heading text-[11px] font-extrabold uppercase tracking-wide text-white">
-                  Escala extraordinária
-                </span>
-              </div>
-
-              <div className="mx-auto max-w-md">
-                {categoriasVisiveis.map((cat) => {
-                  if (cat.funcoes.length === 0) return null;
-                  return (
-                    <div key={cat.id} className="mb-3 break-inside-avoid rounded-xl bg-pdfgray p-3.5">
-                      <div className="mb-2 flex items-center gap-2 text-pdfblue">
-                        <span className="text-[17px] leading-none">{emojiMinisterio(cat.nome)}</span>
-                        <span className="font-heading text-[12.5px] font-extrabold uppercase tracking-wide">
-                          {cat.nome}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        {cat.funcoes.map((f, i) => {
-                          const nome = (evento.atribuicoes[f.id] ?? "").trim();
-                          return (
-                            <div
-                              key={f.id}
-                              className={
-                                "flex items-baseline justify-between gap-3 pb-1.5 " +
-                                (i < cat.funcoes.length - 1 ? "border-b border-white" : "")
-                              }
-                            >
-                              <span className="text-[11px] font-semibold text-ink-600">
-                                {emojiFuncao(f.nome)} {f.nome}
-                              </span>
-                              <span
-                                className={
-                                  "text-right text-[12.5px] font-extrabold uppercase " +
-                                  (nome ? "text-pdfblue" : "italic font-medium normal-case text-ink-400")
-                                }
-                              >
-                                {nome || "não preenchido"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-10 border-t border-pdfgray pt-3 text-center text-[10px] text-ink-400">
-                Escala Extraordinária · Promessa Vila Camargo · gerado em {new Date().toLocaleDateString("pt-BR")}
-              </div>
-            </div>
-          );
-        })()}
-    </div>
+    </section>
   );
 }

@@ -101,6 +101,33 @@ export function nomeDiaSemana(diaSemana: number) {
 
 export const MESES_LISTA = MESES;
 
+const DIA_SEMANA_LONGO: Record<number, string> = { 0: "Domingo", 3: "Quarta-feira", 6: "Sábado" };
+
+/** "Quarta-feira" por extenso (nomeDiaSemana usa "4ª feira", mais curto) — pros cabeçalhos dos cards e do PDF. */
+export function nomeDiaSemanaLongo(diaSemana: number) {
+  return DIA_SEMANA_LONGO[diaSemana] ?? "";
+}
+
+/** Rótulo do tipo de culto pelo dia da semana — "Culto de domingo" etc. */
+export function tipoCulto(diaSemana: number) {
+  if (diaSemana === 0) return "Culto de domingo";
+  if (diaSemana === 6) return "Culto de sábado";
+  if (diaSemana === 3) return "Culto de quarta";
+  return "Culto";
+}
+
+/** "18 de outubro de 2026" a partir de "YYYY-MM-DD". */
+export function fmtDataExtenso(iso: string) {
+  const { y, m, d } = parseIsoDate(iso);
+  return `${d} de ${MESES[m].toLowerCase()} de ${y}`;
+}
+
+/** Dia da semana (0-6) de uma data "YYYY-MM-DD", sem desvio de fuso. */
+export function diaSemanaDe(iso: string) {
+  const { y, m, d } = parseIsoDate(iso);
+  return new Date(y, m, d).getDay();
+}
+
 /** Categorias que podem ter escalas extraordinárias (fora do horário oficial). */
 export const CATEGORIAS_ESCALA_EXTRAORDINARIA = ["Mídia", "Datashow", "Transmissão", "Som"];
 

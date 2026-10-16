@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Manrope, Inter } from "next/font/google";
+import { Montserrat, Inter } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
+// Montserrat: mesma família geométrica da logomarca — títulos, datas e números.
+const montserrat = Montserrat({
   variable: "--font-sans-heading",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: ["500", "600", "700", "800"],
 });
 
 const inter = Inter({
@@ -25,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${manrope.variable} ${inter.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={`${montserrat.variable} ${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

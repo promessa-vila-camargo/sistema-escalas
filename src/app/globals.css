@@ -1,56 +1,96 @@
 @import "tailwindcss";
 
+/*
+ * Identidade de interface da Promessa Vila Camargo.
+ *
+ * Direção: editorial-institucional. Papel levemente quente ao fundo, tinta
+ * azul-marinho (derivada do azul da marca) pro texto, branco nos cartões.
+ * O azul institucional #004B83 é a cor de ação; o laranja #E18800 aparece
+ * só onde carrega significado — domingo, pendência e foco de teclado.
+ * Montserrat (a mesma família geométrica da logomarca) nos títulos e
+ * números; Inter no texto corrido e nos campos.
+ */
 :root {
-  --background: #f7f8fa;
-  --foreground: #1f2937;
+  --background: #f6f5f1;
+  --foreground: #142235;
 }
 
 @theme {
-  /*
-   * Paleta oficial da Promessa Vila Camargo — azul institucional #004B83 e
-   * laranja #E18800, os mesmos hex exatos pedidos pro PDF, agora aplicados
-   * em todo o sistema (não só no documento exportado). brand-700 e
-   * orange-600 SÃO essas duas cores; o resto da escala é só tint/shade
-   * delas pra dar hierarquia (fundo claro, hover, texto).
-   */
-  --color-brand-50: #e8f0f7;
-  --color-brand-100: #d1e2ef;
-  --color-brand-200: #a3c5df;
-  --color-brand-300: #6699bf;
-  --color-brand-500: #045688;
+  --color-brand-50: #eef3f8;
+  --color-brand-100: #dce6f0;
+  --color-brand-200: #b9cde0;
+  --color-brand-300: #7fa3c4;
+  --color-brand-500: #0a5a95;
   --color-brand-600: #004b83;
   --color-brand-700: #004b83;
+  --color-brand-800: #003d6b;
   --color-brand-900: #00304f;
 
-  --color-orange-50: #fdf0dc;
-  --color-orange-100: #fbe2ba;
+  --color-orange-50: #fdf3e3;
+  --color-orange-100: #fbe4c0;
+  --color-orange-200: #f3c780;
   --color-orange-500: #e18800;
   --color-orange-600: #e18800;
-  --color-orange-700: #b96f00;
+  --color-orange-700: #a96600;
 
-  --color-ink-900: #1f2937;
-  --color-ink-600: #6b7280;
-  --color-ink-400: #9ca3af;
+  /* Tinta: neutros com um toque do azul da marca, nunca cinza puro. */
+  --color-ink-950: #0d1a2b;
+  --color-ink-900: #142235;
+  --color-ink-800: #243449;
+  --color-ink-700: #3a4a5f;
+  --color-ink-600: #56657a;
+  --color-ink-500: #6f7d90;
+  --color-ink-400: #949fae;
+  --color-ink-300: #bcc4cf;
+  --color-ink-200: #dfe3e9;
+  --color-ink-100: #eef0f3;
 
-  --color-green-50: #e7f5ec;
+  /* Papel e linhas — o fundo da página e os fios que separam conteúdo. */
+  --color-paper: #f6f5f1;
+  --color-line: #e7e4dd;
+  --color-line-strong: #d5d1c7;
+
+  --color-green-50: #eaf5ee;
+  --color-green-500: #2f8a57;
   --color-green-600: #1e7a46;
+  --color-green-700: #175f37;
 
-  /* Cores oficiais da identidade da Promessa VC, usadas no PDF de escala
-     (documento pra WhatsApp) — hex exatos pedidos, à parte da paleta de UI
-     acima pra não misturar "cor de sistema" com "cor de peça gráfica". */
+  --color-red-50: #fbecea;
+  --color-red-500: #c0473a;
+  --color-red-600: #a33b2f;
+  --color-red-700: #862f25;
+
+  /* Peça gráfica (PDF): mesmos hex oficiais, separados da paleta de interface. */
   --color-pdfblue: #004b83;
   --color-pdforange: #e18800;
   --color-pdfgray: #f2f4f7;
-  /* Quadro escuro de informações do card de cada dia, na exportação visual da escala. */
   --color-pdfdark: #1b2027;
 
-  --color-red-50: #fbeae7;
-  --color-red-500: #b5473a;
-  --color-red-600: #9a3b30;
-
-  --shadow-soft: 0 1px 2px 0 rgb(16 24 32 / 0.05), 0 6px 16px -4px rgb(16 24 32 / 0.08);
-  --shadow-soft-lift: 0 2px 8px 0 rgb(16 24 32 / 0.08), 0 20px 36px -12px rgb(16 24 32 / 0.16);
+  --shadow-soft: 0 1px 2px 0 rgb(20 34 53 / 0.04), 0 4px 12px -6px rgb(20 34 53 / 0.08);
+  --shadow-soft-lift: 0 2px 6px 0 rgb(20 34 53 / 0.06), 0 24px 48px -16px rgb(20 34 53 / 0.22);
   --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-in: fade-in 160ms ease-out both;
+  --animate-rise-in: rise-in 220ms var(--ease-premium) both;
+  --animate-pop-in: pop-in 140ms var(--ease-premium) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
 }
 
 @theme inline {
@@ -64,12 +104,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
 }
 
 h1,
 h2,
 h3 {
   font-family: var(--font-heading);
+  letter-spacing: -0.01em;
 }
 
 @layer base {
@@ -78,40 +120,54 @@ h3 {
     outline-offset: 2px;
     border-radius: 4px;
   }
+  ::selection {
+    background: var(--color-brand-100);
+  }
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-xl border border-brand-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100;
+    @apply h-10 w-full rounded-[10px] border border-line-strong bg-white px-3 text-sm text-ink-900 outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-600 focus:ring-3 focus:ring-brand-100;
+  }
+  textarea.input {
+    @apply h-auto py-2.5;
   }
 
-  /* Tailwind v4 não deixa @apply de uma classe custom dentro de outra — cada
-     variante de botão repete a base em vez de "@apply btn". */
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0;
-  }
+  /* Botões — Tailwind v4 não permite @apply de uma classe custom dentro de
+     outra, então cada variante repete a base (altura 40px, raio 10px). */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-orange-600 text-white hover:bg-orange-700;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-[13.5px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50 bg-brand-700 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_1px_2px_rgb(0_48_79/0.2)] hover:bg-brand-800 active:bg-brand-900;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-brand-700 text-white hover:bg-brand-900;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-[13.5px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50 border border-line-strong bg-white text-ink-900 shadow-[0_1px_2px_rgb(20_34_53/0.05)] hover:border-ink-300 hover:bg-ink-100/50 active:bg-ink-100;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold tracking-wide shadow-soft transition-all duration-300 ease-premium motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-soft-lift disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:translate-y-0 bg-red-500 text-white hover:bg-red-600;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-[13.5px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50 bg-red-600 text-white hover:bg-red-700;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 text-sm font-semibold tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 bg-transparent px-0 py-0 text-ink-600 underline hover:text-ink-900;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-[9px] px-3 text-[13.5px] font-semibold whitespace-nowrap transition-colors duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50 bg-transparent text-ink-600 hover:bg-ink-100 hover:text-ink-900;
+  }
+  /* Modificadores de tamanho — vêm depois das variantes pra vencer na cascata. */
+  .btn-sm {
+    @apply h-8 rounded-[8px] px-3 text-[12.5px];
+  }
+  .btn-icon {
+    @apply inline-flex h-9 w-9 flex-none items-center justify-center rounded-[9px] text-ink-500 transition-colors duration-150 hover:bg-ink-100 hover:text-ink-900 disabled:opacity-40;
   }
 
   .link {
-    @apply text-sm text-orange-600 underline decoration-orange-100 underline-offset-2 transition-colors duration-200 hover:text-orange-700 hover:decoration-orange-500;
+    @apply text-sm font-medium text-brand-700 underline decoration-brand-200 underline-offset-[3px] transition-colors duration-150 hover:decoration-brand-600;
   }
   .link-danger {
-    @apply text-red-600 underline decoration-red-50 underline-offset-2 transition-colors duration-200 hover:text-red-600;
+    @apply text-red-600 underline decoration-red-50 underline-offset-2 transition-colors duration-150 hover:decoration-red-500;
   }
 
   .card {
-    @apply rounded-2xl border border-brand-100 bg-white p-6 shadow-soft sm:p-7;
+    @apply rounded-[14px] border border-line bg-white p-6 shadow-[0_1px_2px_rgb(20_34_53/0.04)] sm:p-7;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold tracking-[0.14em] text-ink-500 uppercase;
   }
 
   .form-message-error {
@@ -122,35 +178,55 @@ h3 {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .badge-positive {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-50 text-green-600;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-50 text-green-700;
   }
   .badge-negative {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-ink-900/5 text-ink-600;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-ink-100 text-ink-600;
   }
   .badge-neutral {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-orange-50 text-orange-700;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-orange-50 text-orange-700;
   }
 
   .empty-state {
-    @apply rounded-xl border border-brand-100 bg-white p-4 text-sm text-ink-600;
+    @apply rounded-[14px] border border-dashed border-line-strong bg-white/60 p-5 text-sm text-ink-600;
   }
 
-  /* Friso de assinatura no topo de cartões — mesmas três cores da marca. */
+  /* Friso de assinatura no topo de cartões — mesmas cores da marca. */
   .gradient-bar {
     @apply h-1 w-full rounded-full bg-gradient-to-r from-brand-700 via-orange-500 to-orange-600;
   }
 
-  /* Linha "função .... pessoa" com pontilhado entre o rótulo e o valor —
-     usada no quadro de escala (tela e impressão). */
+  /* Checkbox próprio: quadrado 18px, azul quando marcado, traço no indeterminado. */
+  .checkbox {
+    @apply relative h-[18px] w-[18px] flex-none cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-ink-300 bg-white transition-colors duration-100 checked:border-brand-700 checked:bg-brand-700 indeterminate:border-brand-700 indeterminate:bg-brand-700 hover:border-ink-400;
+  }
+  .checkbox:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+    background-size: 14px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .checkbox:indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+    background-size: 14px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  /* Linha "função .... pessoa" do formato antigo — mantida para telas que ainda a usam. */
   .leader-row {
     @apply flex items-center gap-1 py-0.5 text-[13px];
   }
   .leader-label {
-    @apply flex-none text-ink-600 font-medium truncate max-w-[48%];
+    @apply max-w-[48%] flex-none truncate font-medium text-ink-600;
   }
   .leader-fill {
-    @apply flex-1 border-b border-dotted border-brand-200 mx-1;
+    @apply mx-1 flex-1 border-b border-dotted border-brand-200;
   }
+}
+
+.doc-impressao {
+  display: none;
 }
 
 @media print {
@@ -158,17 +234,27 @@ h3 {
     display: none !important;
   }
 
-  /* Sem isso, o navegador some com toda cor de fundo (faixa colorida, quadro
-     escuro do card) na hora de imprimir/gerar o PDF — ele assume que é
-     "gráfico decorativo" e economiza tinta, a não ser que a página force. */
+  /* Enquanto um documento está sendo impresso, só ele sai no papel/PDF. */
+  html.imprimindo-doc body > *:not(.doc-impressao) {
+    display: none !important;
+  }
+  html.imprimindo-doc .doc-impressao {
+    display: block;
+  }
+
+  /* Sem isso o navegador some com as cores de fundo na hora de gerar o PDF. */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
+  body {
+    background: white !important;
+  }
+
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 12mm 11mm;
   }
 }

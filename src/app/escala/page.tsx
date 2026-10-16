@@ -1,11 +1,15 @@
 import { verifySession } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
-import { buscarAtribuicoes, buscarObservacoes, buscarMinisteriosResponsaveis } from "@/lib/actions/escala";
+import {
+  buscarAtribuicoes,
+  buscarObservacoes,
+  buscarMinisteriosResponsaveis,
+  buscarConfirmacoes,
+} from "@/lib/actions/escala";
 import { buscarEventosExtra } from "@/lib/actions/eventoExtra";
 import { buscarAtividades } from "@/lib/actions/atividade";
 import { isoDate, addDays, CATEGORIAS_ESCALA_EXTRAORDINARIA } from "@/lib/datas";
 import TopNav from "@/components/TopNav";
-import MonthYearPicker from "@/components/MonthYearPicker";
 import EscalaBoard from "@/components/EscalaBoard";
 import EventosExtra from "@/components/EventosExtra";
 
@@ -45,6 +49,7 @@ export default async function EscalaVoluntarioPage({
   const ministeriosResponsaveis = await buscarMinisteriosResponsaveis(buscaDe, buscaAte);
   const eventosExtra = await buscarEventosExtra();
   const atividades = await buscarAtividades(buscaDe, buscaAte);
+  const confirmacoes = await buscarConfirmacoes(buscaDe, buscaAte);
 
   const categorias = categoriasRaw.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem, funcoes: c.funcoes }));
   const categoriasExtraordinaria = categorias.filter((c) => CATEGORIAS_ESCALA_EXTRAORDINARIA.includes(c.nome));
@@ -63,18 +68,13 @@ export default async function EscalaVoluntarioPage({
           { href: "/minhas-escalas", label: "Confirmar escala" },
         ]}
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-7">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-xl font-extrabold text-ink-900">Minha escala</h1>
-            <p className="text-[12.5px] text-ink-600">Digite seu nome nas funções em que você quer servir.</p>
-          </div>
-          <MonthYearPicker ano={ano} mes={mes} basePath="/escala" />
-        </div>
-        <div className="mb-3">
-          <span className="badge-positive">🟢 Escala oficial</span>
-        </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-6 sm:py-10">
+        {/* key: trocar de mês remonta o quadro — sem ela, o estado do mês anterior ficaria na tela. */}
         <EscalaBoard
+          key={`${ano}-${mes}`}
+          basePath="/escala"
+          rotulo="Minha escala"
+          descricao="Digite seu nome nas funções em que você quer servir."
           ano={ano}
           mes={mes}
           categorias={categorias}
@@ -82,6 +82,7 @@ export default async function EscalaVoluntarioPage({
           observacoesIniciais={observacoes}
           ministeriosResponsaveisIniciais={ministeriosResponsaveis}
           atividadesIniciais={atividades}
+          confirmacoesIniciais={confirmacoes}
           currentUser={user}
           showExport
           pessoasCadastradas={pessoasCadastradas}

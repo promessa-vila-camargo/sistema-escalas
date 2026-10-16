@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { criarAtividade, atualizarAtividade, excluirAtividade, type AtividadeDTO } from "@/lib/actions/atividade";
+import Icon from "./ui/Icon";
 
 function ordenar(lista: AtividadeDTO[]) {
   return [...lista].sort((a, b) => {
@@ -98,69 +99,88 @@ export default function AtividadesDoDia({
     try {
       await excluirAtividade(id);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Não foi possível excluir.");
+      // Volta a atividade pra lista e mostra o erro no próprio bloco.
+      onChange(atividades);
+      setErro(e instanceof Error ? e.message : "Não foi possível excluir.");
     }
   }
 
   return (
-    <div className="no-print mt-2.5 border-t border-brand-100 pt-2">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[9.5px] font-extrabold uppercase tracking-wide text-ink-400">🎉 Atividades do dia</span>
+    <div className="no-print">
+      <div className="flex min-h-8 items-center gap-2.5">
+        <Icon name="sparkle" size={16} className="text-ink-400" />
+        <span className="flex-1 text-[12px] font-semibold text-ink-500">Atividades do dia</span>
         {isAdmin && !formAberto && (
-          <button type="button" onClick={abrirNovo} className="text-[11px] font-semibold text-orange-600 hover:text-orange-700">
-            + Adicionar
+          <button type="button" onClick={abrirNovo} className="btn-ghost btn-sm -mr-2 text-brand-700">
+            <Icon name="plus" size={15} />
+            Adicionar
           </button>
         )}
       </div>
 
       {atividades.length === 0 && !formAberto ? (
-        <p className="text-[11px] italic text-ink-400">Nenhuma atividade cadastrada.</p>
+        <p className="pl-[26px] text-[12.5px] text-ink-400">Nenhuma atividade cadastrada.</p>
       ) : (
-        <div className="flex flex-col gap-1">
+        <ul className="mt-1 flex flex-col gap-1 pl-[26px]">
           {atividades.map((a) => (
-            <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-brand-50/60 px-2 py-1.5">
-              <div className="min-w-0 truncate">
-                <span className="text-[11.5px] font-bold text-ink-900">
-                  {a.horario && <span className="tabular-nums text-orange-600">{a.horario} </span>}
-                  {a.titulo}
-                </span>
-                {a.ministerio && <span className="ml-1 text-[10.5px] text-ink-600">— {a.ministerio}</span>}
+            <li
+              key={a.id}
+              className="group flex items-center justify-between gap-2 rounded-[8px] border border-line bg-white px-2.5 py-1.5"
+            >
+              <div className="min-w-0 truncate text-[13px]">
+                {a.horario && <span className="mr-1.5 font-semibold text-orange-700 tabular-nums">{a.horario}</span>}
+                <span className="font-semibold text-ink-900">{a.titulo}</span>
+                {a.ministerio && <span className="ml-1 text-ink-500">· {a.ministerio}</span>}
               </div>
               {isAdmin && (
-                <div className="flex flex-none gap-2">
-                  <button type="button" onClick={() => abrirEdicao(a)} className="text-[10.5px] text-ink-400 hover:text-orange-600">
-                    editar
+                <div className="flex flex-none gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicao(a)}
+                    className="btn-icon h-7 w-7"
+                    aria-label={`Editar ${a.titulo}`}
+                    title="Editar"
+                  >
+                    <Icon name="note" size={15} />
                   </button>
-                  <button type="button" onClick={() => handleExcluir(a.id)} className="text-[10.5px] text-ink-400 hover:text-red-600">
-                    excluir
+                  <button
+                    type="button"
+                    onClick={() => handleExcluir(a.id)}
+                    className="btn-icon h-7 w-7 hover:bg-red-50 hover:text-red-600"
+                    aria-label={`Excluir ${a.titulo}`}
+                    title="Excluir"
+                  >
+                    <Icon name="trash" size={15} />
                   </button>
                 </div>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
+      )}
+
+      {erro && !formAberto && (
+        <p className="form-message-error mt-1 pl-[26px] text-[12.5px]" role="alert">
+          <Icon name="alert" size={15} className="mt-0.5" /> {erro}
+        </p>
       )}
 
       {formAberto && (
-        <div className="mt-2 flex flex-col gap-2 rounded-lg border border-brand-200 bg-white p-2.5">
+        <div className="mt-2 ml-[26px] flex animate-pop-in flex-col gap-2 rounded-[10px] border border-line-strong bg-white p-3">
           <input
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Nome da atividade"
-            className="input !py-1.5 !text-[12px]"
+            className="input"
+            autoFocus
           />
-          <div className="flex gap-2">
-            <input
-              type="time"
-              value={horario}
-              onChange={(e) => setHorario(e.target.value)}
-              className="input !py-1.5 !text-[12px]"
-            />
+          <div className="grid grid-cols-[7.5rem_1fr] gap-2">
+            <input type="time" value={horario} onChange={(e) => setHorario(e.target.value)} className="input" />
             <input
               value={ministerio}
               onChange={(e) => setMinisterio(e.target.value)}
               placeholder="Ministério responsável"
-              className="input !py-1.5 !text-[12px]"
+              className="input"
             />
           </div>
           <textarea
@@ -168,15 +188,19 @@ export default function AtividadesDoDia({
             onChange={(e) => setDescricao(e.target.value)}
             placeholder="Descrição (opcional)"
             rows={2}
-            className="input resize-none !py-1.5 !text-[12px]"
+            className="input resize-none"
           />
-          {erro && <p className="text-[11px] font-medium text-red-600">{erro}</p>}
+          {erro && (
+            <p className="form-message-error text-[12.5px]" role="alert">
+              <Icon name="alert" size={15} className="mt-0.5" /> {erro}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setFormAberto(false)}>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setFormAberto(false)}>
               Cancelar
             </button>
-            <button type="button" className="btn-primary !px-4 !py-1.5 !text-[12px]" disabled={salvando} onClick={handleSalvar}>
-              {salvando ? "Salvando..." : editandoId ? "Salvar" : "Adicionar"}
+            <button type="button" className="btn-primary btn-sm" disabled={salvando} onClick={handleSalvar}>
+              {salvando ? "Salvando…" : editandoId ? "Salvar" : "Adicionar"}
             </button>
           </div>
         </div>
